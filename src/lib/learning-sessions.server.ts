@@ -7,7 +7,7 @@ export type LearningSession = {
   startedAt: string; connectedAt?: string; lastSeenAt?: string; attempts: number; hintsUsed: number;
   testScore?: { passed: number; total: number }; latestFeedback?: string; recovery?: string;
   potentialStruggle: boolean; struggleSignal?: string;
-  checkpoints: Array<{ index: number; title: string; detail: string; status: "locked" | "active" | "passed" | "failed"; attempts: number; lastOutput?: string }>;
+  checkpoints: Array<{ index: number; title: string; detail: string; status: "locked" | "active" | "passed" | "failed"; evidence: "not_verified" | "detected" | "verified"; attempts: number; lastOutput?: string }>;
   projectFiles?: Array<{ path: string; content: string }>;
   projectReview?: { score: number; verdict: string; strengths: string[]; issues: string[]; missing: string[]; nextSteps: string[] };
   runGuidance?: string;
@@ -33,7 +33,7 @@ function makeCheckpoints(body: Record<string, unknown>, instructions: string) {
     const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
     const line = typeof item === "string" ? item : `${record["title"] ?? "Step ${index + 1}"}: ${record["detail"] ?? "Complete this step."}`;
     const [title, ...detailParts] = checkpointText(line).split(/:\s*/, 2);
-    return { index, title: text(record["title"] ?? title, 180) || `Step ${index + 1}`, detail: text(record["detail"] ?? detailParts.join(": "), 1000) || checkpointText(line), status: index === 0 ? "active" as const : "locked" as const, attempts: 0 };
+    return { index, title: text(record["title"] ?? title, 180) || `Step ${index + 1}`, detail: text(record["detail"] ?? detailParts.join(": "), 1000) || checkpointText(line), status: index === 0 ? "active" as const : "locked" as const, evidence: "not_verified" as const, attempts: 0 };
   });
   return checkpoints.length ? checkpoints : [{ index: 0, title: "Complete the challenge", detail: "Build the requested project and verify it locally.", status: "active" as const, attempts: 0 }];
 }
@@ -75,7 +75,7 @@ function compact(session: LearningSession) {
       : session.connectedAt
         ? "disconnected"
         : "waiting";
-  const checkpointInstructions = session.checkpoints.map((item) => `• ${item.status === "passed" ? "✓" : item.status === "failed" ? "✗" : item.status === "active" ? "→" : "○"} Step ${item.index + 1}: ${item.title} — ${item.detail}`).join("\n");
+  const checkpointInstructions = session.checkpoints.map((item) => `• ${item.evidence === "verified" ? "✓ VERIFIED" : item.evidence === "detected" ? "◐ DETECTED" : item.status === "failed" ? "✗ NOT VERIFIED" : item.status === "active" ? "→ NOT VERIFIED" : "○ NOT VERIFIED"} · Step ${item.index + 1}: ${item.title} — ${item.detail}`).join("\n");
   return { session_id: session.sessionId, challenge_id: session.challengeId, title: session.title, language: session.language,
     concept: session.concept, instructions: `${session.instructions}${checkpointInstructions ? `\n\nSequential checkpoints:\n${checkpointInstructions}` : ""}`, expected_skills: session.expectedSkills, test_command: session.testCommand,
     status: session.status, started_at: session.startedAt, connected_at: session.connectedAt, attempts: session.attempts,
@@ -95,7 +95,7 @@ export function connectLearningSession(body: Record<string, unknown>) {
 export function stateOf(session: LearningSession) { return compact(session); }
 
 function boundedPayload(payload: Record<string, unknown>) {
-  const allowed = ["status", "passed", "failed", "errors", "score", "total", "attempt", "error", "stderr", "stdout", "file", "language", "diagnostics", "duration_ms", "checkpoint_results"];
+  const allowed = ["status", "passed", "failed", "errors", "score", "total", "attempt", "error", "stderr", "stdout", "file", "language", "signals", "diagnostics", "duration_ms", "checkpoint_results"];
   const result: Record<string, unknown> = {};
   for (const key of allowed) {
     const value = payload[key];
@@ -126,10 +126,12 @@ function applyCheckpointResults(session: LearningSession, values: unknown) {
     checkpoint.lastOutput = text(result["output"], 1200);
     if (Boolean(result["passed"])) {
       checkpoint.status = "passed";
+      checkpoint.evidence = "verified";
       const next = session.checkpoints[index + 1];
       if (next && next.status === "locked") next.status = "active";
     } else {
       checkpoint.status = "failed";
+      checkpoint.evidence = "not_verified";
       blocked = true;
     }
   }
@@ -138,11 +140,37 @@ function applyCheckpointResults(session: LearningSession, values: unknown) {
   if (passed === session.checkpoints.length) session.status = "completed";
 }
 
+function checkpointWasDetected(checkpoint: LearningSession["checkpoints"][number], payload: Record<string, unknown>) {
+  const signals = Array.isArray(payload["signals"]) ? payload["signals"].map((value) => text(value, 120).toLowerCase()) : [];
+  const haystack = [...signals, text(payload["file"], 240).toLowerCase(), text(payload["language"], 80).toLowerCase()].join(" ");
+  if (!haystack.trim()) return false;
+  const description = `${checkpoint.title} ${checkpoint.detail}`.toLowerCase();
+  const signalRules: Array<[string[], string[]]> = [
+    [["virtual environment", "venv"], ["venv", "virtual-environment", "workspace:venv"]],
+    [["pandas"], ["pandas", "dependency:pandas", "import:pandas"]],
+    [["matplotlib"], ["matplotlib", "dependency:matplotlib", "import:matplotlib"]],
+    [["main.py"], ["file:main.py"]],
+    [["print", "print statement"], ["code:print"]],
+    [["project folder", "project directory"], ["workspace:project"]],
+  ];
+  if (signalRules.some(([terms, matches]) => terms.some((term) => description.includes(term)) && matches.some((match) => haystack.includes(match)))) return true;
+  const ignored = new Set(["create", "install", "add", "with", "from", "into", "this", "that", "your", "step", "project", "folder", "file", "the", "and", "run"]);
+  return description.split(/[^a-z0-9_.]+/).filter((word) => word.length >= 5 && !ignored.has(word)).some((word) => haystack.includes(word));
+}
+
+function applyDetectedEvidence(session: LearningSession, payload: Record<string, unknown>) {
+  for (const checkpoint of session.checkpoints) {
+    if (checkpoint.evidence === "verified" || checkpoint.evidence === "detected") continue;
+    if (checkpointWasDetected(checkpoint, payload)) checkpoint.evidence = "detected";
+  }
+}
+
 export function recordEvent(session: LearningSession, eventType: string, payload: Record<string, unknown>) {
   if (!allowedEvents.has(eventType)) throw new Error("Unsupported session event.");
   const at = new Date().toISOString(); session.lastSeenAt = at;
   // Evidence is deliberately structured and bounded; no whole workspace/code is retained.
   const safePayload = boundedPayload(payload);
+  if (eventType === "file_evidence") applyDetectedEvidence(session, payload);
   if (eventType === "test_result") applyCheckpointResults(session, payload["checkpoint_results"]);
   session.events.push({ eventType, at, payload: safePayload }); if (session.events.length > 200) session.events.shift();
   if (eventType === "test_result") {
