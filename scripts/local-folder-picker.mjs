@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const PORT = Number(process.env.LOOP_BRIDGE_PORT || 8091);
 const ALLOWED_ORIGINS = new Set(
-  (process.env.LOOP_BRIDGE_ORIGINS || "http://localhost:8080,http://127.0.0.1:8080")
+  (process.env.LOOP_BRIDGE_ORIGINS || "http://localhost:8080,http://127.0.0.1:8080,https://makemylogic-production.vercel.app")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean),
@@ -160,5 +160,5 @@ server.on("error", (error) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[LOOP] Local desktop bridge ready: http://127.0.0.1:${PORT}`);
-  console.log(`[LOOP] Allowed browser origins: localhost/127.0.0.1`);
+  console.log(`[LOOP] Allowed browser origins: localhost/127.0.0.1 and makemylogic-production.vercel.app`);
 });

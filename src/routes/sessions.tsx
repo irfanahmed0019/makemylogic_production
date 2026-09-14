@@ -177,13 +177,13 @@ function Sessions() {
   async function openVsCode(session?: { sessionId: string }) {
     let path = workspacePath.trim();
     if (!path) {
-      path = await pickProjectFolder();
+      // Keep the selected path in this local variable. React state updates are
+      // asynchronous, so reading workspacePath immediately after the picker
+      // would otherwise use the previous empty value.
+      path = await pickProjectFolder(true);
       if (!path) {
-      const anchor = document.createElement("a");
-      anchor.href = "vscode://";
-      anchor.click();
-      if (session) await connectExtension(session);
-      return;
+        setPickerError("Select a local project folder first. Keep the BuildMyLogic desktop bridge running so the exact folder can be opened in VS Code.");
+        return;
       }
     }
     try {
@@ -212,7 +212,7 @@ function Sessions() {
     }
   }
 
-  async function pickProjectFolder() {
+  async function pickProjectFolder(forOpening = false) {
     setPickingProject(true);
     setPickerError("");
     try {
@@ -239,6 +239,14 @@ function Sessions() {
         }
       } catch {
         // Desktop bridge unavailable; proceed to browser folder picker
+      }
+
+      // A browser can upload directory contents, but it cannot reveal the
+      // absolute local path needed by VS Code. Do not open a misleading file
+      // picker when this action is specifically trying to launch VS Code.
+      if (forOpening) {
+        setPickerError("The local folder bridge is not running. Start it with `npm run dev` in BuildMyLogic, then click Open VS Code again.");
+        return "";
       }
 
       // 2. Browser native file/directory picker fallback
