@@ -6,7 +6,13 @@ const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | unde
 
 export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
 
-export const supabase: SupabaseClient | null = hasSupabaseConfig
+// Supabase Realtime expects a native WebSocket while the client is created.
+// SSR runs on Node 20 in the local/runtime environments, where that global is
+// not available. Auth, cloud sync, and OAuth are browser-only in this app, so
+// defer client creation until the browser bundle is running.
+const isBrowser = typeof window !== "undefined";
+
+export const supabase: SupabaseClient | null = isBrowser && hasSupabaseConfig
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,

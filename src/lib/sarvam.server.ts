@@ -30,7 +30,7 @@ export async function sarvamChat(apiKey: string, messages: Msg[], maxTokens = 80
           "api-subscription-key": apiKey.trim(),
         },
         body: JSON.stringify({
-          model: process.env.SARVAM_MODEL?.trim() || "sarvam-105b",
+          model: process.env["SARVAM_MODEL"]?.trim() || "sarvam-105b",
           messages,
           temperature: 0.1,
           max_tokens: maxTokens,
@@ -42,12 +42,15 @@ export async function sarvamChat(apiKey: string, messages: Msg[], maxTokens = 80
 
       const rawBody = await res.text().catch(() => "");
       if (!res.ok) {
-        const safeMessage = `Sarvam AI error ${res.status}`;
+        const safeMessage =
+          res.status === 403
+            ? "Sarvam AI rejected the API key (403). Check that SARVAM_API_KEY is a current Sarvam key, then update the server secret and redeploy."
+            : `Sarvam AI error ${res.status}`;
         if (isRetryableStatus(res.status) && attempt < attempts - 1) {
           await sleep(500 * 2 ** attempt);
           continue;
         }
-        throw new Error(`${safeMessage}. Please try again.`);
+        throw new Error(res.status === 403 ? safeMessage : `${safeMessage}. Please try again.`);
       }
 
       let json: SarvamResponse;

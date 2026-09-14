@@ -6,7 +6,7 @@
  */
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -21,7 +21,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { setMissionProgress, useLoop } from "@/lib/loop-store";
+import { applyBuildSessionEvidence, applySarvamDashboardPlan, getLoopState, logActivity, setMissionProgress, useLoop } from "@/lib/loop-store";
+import type { BuildSessionState } from "@/lib/loop-types";
+import { aiRetunePlan } from "@/lib/sarvam.functions";
 import { ScheduleModal, ScheduleSyncCard } from "@/components/ScheduleModal";
 
 export const Route = createFileRoute("/dashboard")({
@@ -53,6 +55,43 @@ function Dashboard() {
   // Google Calendar scheduling modal state
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [showPromptBanner, setShowPromptBanner] = useState(false);
+  const dashboardRetuneKey = useRef("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncBuildSession = async () => {
+      const raw = window.localStorage.getItem("bml-vscode-session");
+      if (!raw) return;
+      try {
+        const saved = JSON.parse(raw) as { sessionId?: string };
+        if (!saved.sessionId) return;
+        const response = await fetch(`/api/sessions/${encodeURIComponent(saved.sessionId)}/state`, { cache: "no-store" });
+        if (!response.ok) return;
+        const result = await response.json() as { ok?: boolean; state?: BuildSessionState };
+        const remote = result.state;
+        if (cancelled || !result.ok || !remote) return;
+        const shouldRetune = remote.status === "completed" || remote.status === "failed" || Boolean(remote.potential_struggle);
+        if (!shouldRetune) return;
+        applyBuildSessionEvidence(remote);
+        const key = `${remote.session_id}:${remote.status}:${remote.attempts}:${remote.test_score?.passed ?? 0}:${remote.potential_struggle ? "struggle" : "normal"}`;
+        if (dashboardRetuneKey.current === key) return;
+        dashboardRetuneKey.current = key;
+        const currentState = getLoopState();
+        if (!currentState.profile || !currentState.plan) return;
+        void aiRetunePlan({ data: { profile: currentState.profile, plan: currentState.plan, activity: currentState.activity } }).then((suggested) => {
+          applySarvamDashboardPlan(suggested);
+          logActivity({ kind: "ai", text: remote.status === "completed" ? "Vibe updated the dashboard after you proved the challenge." : "Vibe updated the dashboard with a focused recovery path." });
+        }).catch(() => {
+          // The deterministic dashboard adjustment remains available without Sarvam.
+        });
+      } catch {
+        // The Sessions page displays the actionable expired-session message.
+      }
+    };
+    void syncBuildSession();
+    const timer = window.setInterval(() => void syncBuildSession(), 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
 
   // Check if learner has booked a Google Calendar reminder recently
   useEffect(() => {
@@ -342,8 +381,11 @@ function Dashboard() {
                   <span className="pill bg-primary-soft text-accent-foreground text-[10px]">AI</span>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  Your path is optimized for <strong>{goal}</strong>. Each mission produces verifiable proof that you can architect, test, and ship.
+                  {plan.progress.insights?.[0] ?? `Your path is optimized for ${goal}. Each mission produces verifiable proof that you can architect, test, and ship.`}
                 </p>
+                <div className="mt-3 rounded-xl bg-primary-soft px-3 py-2.5 text-xs font-bold">
+                  Next adaptive task: {current?.title ?? "Start a mission"}
+                </div>
               </section>
 
               {/* Next Upcoming Missions */}

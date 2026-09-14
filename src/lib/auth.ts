@@ -67,6 +67,30 @@ export function getAuthSession(): AuthSession | null {
   return session;
 }
 
+/** Returns the current Supabase access token before calling an authenticated API. */
+export async function getAuthSessionForApi(): Promise<AuthSession | null> {
+  load();
+  if (!supabase) return session;
+  const { data } = await supabase.auth.getSession();
+  const current = data.session;
+  if (!current?.user) return session;
+  session = {
+    uid: current.user.id,
+    email: current.user.email ?? "",
+    displayName:
+      (current.user.user_metadata?.full_name as string) ||
+      (current.user.user_metadata?.name as string) ||
+      current.user.email?.split("@")[0] ||
+      "Builder",
+    photoUrl: (current.user.user_metadata?.avatar_url as string) || undefined,
+    idToken: current.access_token,
+    ...(current.refresh_token ? { refreshToken: current.refresh_token } : {}),
+    expiresAt: (current.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000,
+  };
+  persist();
+  return session;
+}
+
 export function hasCloudConfig(): boolean {
   return hasSupabaseConfig;
 }
@@ -90,6 +114,8 @@ if (supabase) {
           u.email?.split("@")[0] ||
           "Builder",
         photoUrl: (u.user_metadata?.avatar_url as string) || undefined,
+        ...(supabaseSession.access_token ? { idToken: supabaseSession.access_token } : {}),
+        ...(supabaseSession.refresh_token ? { refreshToken: supabaseSession.refresh_token } : {}),
         expiresAt: (supabaseSession.expires_at ?? Math.floor(Date.now() / 1000) + 3600) * 1000,
       };
       persist();
@@ -132,6 +158,8 @@ export async function signInWithGoogleCredential(credential: string) {
           data.user.email?.split("@")[0] ||
           "Builder",
         photoUrl: (data.user.user_metadata?.avatar_url as string) || undefined,
+        ...(data.session?.access_token ? { idToken: data.session.access_token } : {}),
+        ...(data.session?.refresh_token ? { refreshToken: data.session.refresh_token } : {}),
         expiresAt: Date.now() + 3600 * 1000,
       };
       persist();
@@ -191,4 +219,3 @@ export async function renderGoogleButton(
   };
   element.appendChild(btn);
 }
-

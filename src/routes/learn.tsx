@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, Code2, File, FolderOpen, Paperclip, Send, Sparkles, Terminal, UserRound, X, Plug, Copy, Lightbulb } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Check, ChevronRight, Code2, File, FolderOpen, Paperclip, Send, Sparkles, Terminal, UserRound, X, Lightbulb } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { clearLearningChatMessages, logActivity, recordMissionEvidence, recordSkillEvidence, resetLoop, saveLearningChat, selectLearningMission, setMissionProgress, useLoop } from "@/lib/loop-store";
 import type { LearningMode, LearningState } from "@/lib/loop-types";
 import { aiTeachMicroLesson } from "@/lib/sarvam.functions";
+import { getAuthSessionForApi } from "@/lib/auth";
 import { C_CURRICULUM_MAP, parseDrillState, type CConceptId } from "@/lib/curriculum-engine";
 
 
@@ -82,9 +83,8 @@ function Learn() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
-  const [vscodeSession, setVscodeSession] = useState<{ sessionId: string; token: string; challengeId: string } | null>(null);
+  const [vscodeSession, setVscodeSession] = useState<{ sessionId: string; challengeId: string; status?: string } | null>(null);
   const [vscodeLoading, setVscodeLoading] = useState(false);
-  const [vscodeCopied, setVscodeCopied] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -410,89 +410,8 @@ function Learn() {
 
         {/* VS Code Extension Connect Panel */}
         <section className="card-surface p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Plug className="h-4 w-4" />
-            <h2 className="text-sm font-black">Connect VS Code</h2>
-            {vscodeSession && <span className="ml-auto rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-black text-green-700">● ACTIVE</span>}
-          </div>
-          {!vscodeSession ? (
-            <>
-              <p className="text-xs font-semibold text-muted-foreground mb-3">Write code in VS Code. BuildMyLogic watches and helps automatically.</p>
-              <button
-                type="button"
-                disabled={vscodeLoading}
-                onClick={async () => {
-                  setVscodeLoading(true);
-                  try {
-                    const res = await fetch("/api/vscode/sessions", {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ challenge_id: current?.id || "learn", user_id: state.plan?.projectTitle || "learner" }),
-                    });
-                    const data = await res.json() as { session_id?: string; token?: string; challenge_id?: string };
-                    if (data.session_id && data.token) {
-                      setVscodeSession({ sessionId: data.session_id, token: data.token, challengeId: data.challenge_id || current?.id || "learn" });
-                    }
-                  } catch (e) {
-                    console.error(e);
-                  } finally {
-                    setVscodeLoading(false);
-                  }
-                }}
-                className="btn-base btn-ink w-full text-xs"
-              >
-                {vscodeLoading ? "Connecting…" : "Generate pairing token"}
-              </button>
-            </>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs font-black text-green-700">✅ Session ready! Follow steps below in VS Code:</p>
-
-              {/* Step 1 */}
-              <div className="rounded-xl border border-black/10 bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-1">Step 1 · Set server URL</p>
-                <p className="text-xs font-semibold mb-1.5">Open VS Code → Settings → search <code className="bg-gray-100 px-1 rounded">buildmylogic</code> → set Server URL to:</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-gray-100 px-2 py-1 text-[11px] font-mono break-all">http://localhost:8080</code>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText("http://localhost:8080"); setVscodeCopied("url"); setTimeout(() => setVscodeCopied(null), 1500); }} className="shrink-0 rounded p-1 hover:bg-gray-100">
-                    {vscodeCopied === "url" ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="rounded-xl border border-black/10 bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-1">Step 2 · Session ID</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-gray-100 px-2 py-1 text-[11px] font-mono break-all">{vscodeSession.sessionId}</code>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText(vscodeSession.sessionId); setVscodeCopied("sid"); setTimeout(() => setVscodeCopied(null), 1500); }} className="shrink-0 rounded p-1 hover:bg-gray-100">
-                    {vscodeCopied === "sid" ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="rounded-xl border border-black/10 bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-1">Step 3 · Token (secret)</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded bg-gray-100 px-2 py-1 text-[11px] font-mono break-all">{vscodeSession.token}</code>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText(vscodeSession.token); setVscodeCopied("tok"); setTimeout(() => setVscodeCopied(null), 1500); }} className="shrink-0 rounded p-1 hover:bg-gray-100">
-                    {vscodeCopied === "tok" ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Step 4 */}
-              <div className="rounded-xl border border-black/10 bg-white p-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-1">Step 4 · Start session in VS Code</p>
-                <p className="text-xs font-semibold">Press <kbd className="rounded bg-gray-200 px-1 text-[10px]">Ctrl+Shift+P</kbd> → type <strong>BuildMyLogic: Start Session</strong> → paste the Session ID and Token above.</p>
-              </div>
-
-              <button type="button" onClick={() => setVscodeSession(null)} className="w-full text-center text-[10px] font-bold text-muted-foreground hover:text-destructive">
-                Reset pairing
-              </button>
-            </div>
-          )}
+          <div className="mb-3 flex items-center gap-2"><Code2 className="h-4 w-4" /><h2 className="text-sm font-black">Build with VS Code</h2>{vscodeSession && <span className="ml-auto rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-black text-green-700">● {vscodeSession.status === "active" || vscodeSession.status === "connected" ? "CONNECTED" : "READY"}</span>}</div>
+        {!vscodeSession ? <><p className="mb-3 text-xs font-semibold text-muted-foreground">Open the existing BuildMyLogic extension with the same challenge. Only the Session ID is needed.</p><button type="button" disabled={vscodeLoading} onClick={async () => { setVscodeLoading(true); try { const auth = await getAuthSessionForApi(); const headers: Record<string, string> = { "content-type": "application/json" }; if (auth?.idToken) headers.Authorization = `Bearer ${auth.idToken}`; const res = await fetch("/api/sessions/start", { method: "POST", headers, body: JSON.stringify({ challenge_id: current.id, user_id: auth?.uid || "local-user", title: current.title, language: current.stack, concept: current.skills?.[0] || "problem solving", instructions: current.description + "\\n\\nRequirements:\\n" + current.steps.map((step) => `• ${step.title}: ${step.detail}`).join("\\n"), expected_skills: current.skills }) }); const data = await res.json() as { ok?: boolean; session_id?: string; error?: string }; if (!res.ok || !data.ok || !data.session_id) throw new Error(data.error || "Could not start the VS Code session."); const next = { sessionId: data.session_id, challengeId: current.id, status: "waiting" }; setVscodeSession(next); const anchor = document.createElement("a"); anchor.href = `vscode://buildmylogic.logic-analyser/connect?sessionId=${encodeURIComponent(next.sessionId)}&apiBaseUrl=${encodeURIComponent(window.location.origin)}`; anchor.click(); } catch (e) { setError(e instanceof Error ? e.message : "Could not open the VS Code session."); } finally { setVscodeLoading(false); } }} className="btn-base btn-ink w-full text-xs">{vscodeLoading ? "Opening VS Code…" : "Open session in VS Code"}</button></> : <div className="space-y-3"><p className="text-xs font-black text-green-700">✅ Session ID ready. VS Code is opening the same mission.</p><button type="button" onClick={() => { const anchor = document.createElement("a"); anchor.href = `vscode://buildmylogic.logic-analyser/connect?sessionId=${encodeURIComponent(vscodeSession.sessionId)}&apiBaseUrl=${encodeURIComponent(window.location.origin)}`; anchor.click(); }} className="btn-base btn-outline w-full text-xs">Open VS Code again</button><button type="button" onClick={() => setVscodeSession(null)} className="w-full text-center text-[10px] font-bold text-muted-foreground hover:text-destructive">Start a new session</button></div>}
         </section>
 
         <section className="card-surface p-5">
@@ -512,4 +431,3 @@ function Learn() {
     </div>
   </AppShell>;
 }
-

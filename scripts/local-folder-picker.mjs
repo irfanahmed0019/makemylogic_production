@@ -114,6 +114,42 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/open-vscode-session") {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; if (body.length > 12000) req.destroy(); });
+    req.on("end", async () => {
+      try {
+        const parsed = JSON.parse(body || "{}");
+        const path = typeof parsed.path === "string" ? resolve(parsed.path.trim()) : "";
+        const sessionId = typeof parsed.session_id === "string" ? parsed.session_id.trim() : "";
+        const apiBaseUrl = typeof parsed.api_base_url === "string" ? parsed.api_base_url.trim() : "";
+        if (!path || !sessionId) return json(res, 400, { ok: false, error: "Project path and BuildMyLogic Session ID are required." });
+        if (!statSync(path).isDirectory()) return json(res, 400, { ok: false, error: "Project path is not a folder." });
+        let apiOrigin = "http://localhost:8080";
+        if (apiBaseUrl) {
+          try {
+            const parsedOrigin = new URL(apiBaseUrl);
+            if (!["http:", "https:"].includes(parsedOrigin.protocol)) throw new Error("Invalid protocol");
+            apiOrigin = parsedOrigin.origin;
+          } catch {
+            return json(res, 400, { ok: false, error: "BuildMyLogic API address is invalid." });
+          }
+        }
+        const uri = `vscode://buildmylogic.logic-analyser/connect?sessionId=${encodeURIComponent(sessionId)}&apiBaseUrl=${encodeURIComponent(apiOrigin)}`;
+        try {
+          await run("code", ["--reuse-window", path]);
+          await run("code", ["--open-url", uri]);
+        } catch {
+          await run(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "darwin" ? [uri] : process.platform === "win32" ? ["/c", "start", "", uri] : [uri]);
+        }
+        return json(res, 200, { ok: true });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error instanceof Error ? error.message : "Could not open the BuildMyLogic session in VS Code." });
+      }
+    });
+    return;
+  }
+
   return json(res, 404, { ok: false, error: "Not found" });
 });
 

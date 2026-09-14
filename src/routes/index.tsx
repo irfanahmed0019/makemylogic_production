@@ -196,12 +196,21 @@ function Introduction() {
   }
 
   async function build(challenge: string) {
+    const selectedProject = chosenProject !== null ? projects[chosenProject] : null;
     const idea =
       customIdea.trim() ||
-      (chosenProject !== null && projects[chosenProject]
-        ? `${projects[chosenProject].title} — ${projects[chosenProject].summary}`
+      (selectedProject
+        ? `${selectedProject.title} — ${selectedProject.summary} (Required stack: ${selectedProject.stack})`
         : "");
-    const finalProfile: Profile = { ...profile, challenge, projectIdea: idea };
+    // A suggested project's stack is the learner's explicit choice for this path.
+    // Preserve it in their profile so the plan generator cannot silently switch stacks.
+    const selectedStack = selectedProject?.stack.trim();
+    const finalProfile: Profile = {
+      ...profile,
+      challenge,
+      projectIdea: idea,
+      technologies: selectedStack ? [{ name: selectedStack, level: "beginner" }] : profile.technologies,
+    };
     setProfile(finalProfile);
     setBusy("Designing your build path…");
     setError(null);

@@ -2,7 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { sarvamJson } from "./lib/sarvam.server";
+import { connectLearningSession, failSession, getHint, getRunPlan, recordEvent, startLearningSession, stateOf, submitProject, verifySession } from "./lib/learning-sessions.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -20,24 +20,11 @@ async function getServerEntry(): Promise<ServerEntry> {
 }
 
 
-type VscodeSession = {
-  sessionId: string;
-  challengeId: string;
-  userId: string;
-  token: string;
-  active: boolean;
-  startedAt: string;
-  endedAt?: string;
-  events: Array<Record<string, unknown>>;
-};
-
-const vscodeSessions = new Map<string, VscodeSession>();
-
 function corsHeaders(): Record<string, string> {
   return {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "content-type, authorization, x-buildmylogic-token",
+    "access-control-allow-headers": "content-type, authorization",
   };
 }
 
@@ -66,62 +53,19 @@ function clean(value: unknown, max = 500): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function bearerOrPairingToken(request: Request): string {
-  const pairing = request.headers.get("x-buildmylogic-token")?.trim();
-  if (pairing) return pairing;
-  const auth = request.headers.get("authorization")?.trim() ?? "";
-  return auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
-}
-
-function validateVscodeSession(request: Request, sessionId: string): VscodeSession | Response {
-  const session = vscodeSessions.get(sessionId);
-  if (!session) return jsonResponse({ ok: false, error: "BuildMyLogic session not found." }, 404);
-  if (!session.active) return jsonResponse({ ok: false, error: "BuildMyLogic session is no longer active." }, 409);
-  const token = bearerOrPairingToken(request);
-  if (!token || token !== session.token) return jsonResponse({ ok: false, error: "Invalid BuildMyLogic pairing token." }, 401);
-  return session;
-}
-
-function summarizeEvent(eventType: string, payload: Record<string, unknown>) {
-  if (eventType === "test_run") {
-    const passed = Number(payload.passed ?? 0);
-    const failed = Number(payload.failed ?? 0);
-    const errors = Number(payload.errors ?? 0);
-    return {
-      kind: failed || errors ? "test_failure" : "test_success",
-      passed,
-      failed,
-      errors,
-      success: Boolean(payload.success),
-    };
-  }
-  if (eventType === "diagnostics_change" || eventType === "context" || eventType === "active_editor") {
-    const diagnostics = Array.isArray(payload.diagnostics) ? payload.diagnostics : [];
-    return { kind: "editor_evidence", diagnosticCount: diagnostics.length };
-  }
-  if (eventType === "stuck") return { kind: "learner_stuck" };
-  if (eventType === "submit") return { kind: "submission" };
-  return { kind: eventType };
-}
-
-async function maybeVibeIntervention(session: VscodeSession, eventType: string, payload: Record<string, unknown>) {
-  if (eventType !== "stuck") return null;
-  const apiKey = process.env.SARVAM_API_KEY?.trim();
-  if (!apiKey) return null;
-  const note = clean(payload.note, 1000);
-  const editor = payload.activeEditor && typeof payload.activeEditor === "object" ? JSON.stringify(payload.activeEditor).slice(0, 9000) : "none";
-  const diagnostics = Array.isArray(payload.diagnostics) ? JSON.stringify(payload.diagnostics).slice(0, 5000) : "none";
-  const lastRun = payload.lastRun && typeof payload.lastRun === "object" ? JSON.stringify(payload.lastRun).slice(0, 4000) : "none";
+async function authenticatedUserId(request: Request): Promise<string | undefined> {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+  const accessToken = authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "";
+  if (!accessToken) return undefined;
+  const supabaseUrl = process.env["VITE_SUPABASE_URL"]?.trim();
+  const supabaseAnonKey = process.env["VITE_SUPABASE_ANON_KEY"]?.trim();
+  if (!supabaseUrl || !supabaseAnonKey) return accessToken === "local-builder" ? "local-builder" : undefined;
   try {
-    return await sarvamJson<{ hint: string; nextStep: string }>(
-      apiKey,
-      `You are Vibe inside BuildMyLogic. Give the learner the minimum useful intervention. Never invent facts about their code. Do not provide a complete challenge solution. Return JSON exactly: {"hint":"one short explanation","nextStep":"one concrete action"}.`,
-      `Challenge: ${session.challengeId}\nLearner says: ${note || "I am stuck"}\nActive editor evidence: ${editor}\nDiagnostics: ${diagnostics}\nLatest test evidence: ${lastRun}`,
-      450,
-    );
-  } catch {
-    return null;
-  }
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: supabaseAnonKey, authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) return undefined;
+    const user = await response.json() as { id?: unknown };
+    return typeof user.id === "string" && user.id ? user.id : undefined;
+  } catch { return undefined; }
 }
 
 async function handleBuildMyLogicApi(request: Request): Promise<Response | null> {
@@ -131,82 +75,50 @@ async function handleBuildMyLogicApi(request: Request): Promise<Response | null>
 
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
 
-
-  if (request.method === "POST" && pathname === "/api/vscode/sessions") {
+  // Learning sessions are the shared source of truth for the web dashboard and VS Code.
+  // The website authenticates session creation. The extension joins the same session with
+  // the short Session ID copied from the website.
+  if (request.method === "POST" && pathname === "/api/sessions/start") {
     const body = await readJson(request);
-    const challengeId = clean(body.challenge_id ?? body.challengeId, 180);
-    const userId = clean(body.user_id ?? body.userId, 180) || "local-user";
-    if (!challengeId) return jsonResponse({ ok: false, error: "challenge_id is required." }, 400);
-    const sessionId = `bml_${crypto.randomUUID()}`;
-    const tokenBytes = new Uint8Array(24);
-    crypto.getRandomValues(tokenBytes);
-    const token = Array.from(tokenBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    const session: VscodeSession = {
-      sessionId,
-      challengeId,
-      userId,
-      token,
-      active: true,
-      startedAt: new Date().toISOString(),
-      events: [],
-    };
-    vscodeSessions.set(sessionId, session);
-    return jsonResponse({ ok: true, session_id: sessionId, challenge_id: challengeId, user_id: userId, token });
+    const configuredSupabase = Boolean(process.env["VITE_SUPABASE_URL"]?.trim() && process.env["VITE_SUPABASE_ANON_KEY"]?.trim());
+    const authenticatedId = await authenticatedUserId(request);
+    const requestedId = clean(body.user_id ?? body.userId, 180);
+    const localDevelopment = ["localhost", "127.0.0.1"].includes(url.hostname) && process.env.NODE_ENV !== "production";
+    if (configuredSupabase && !authenticatedId && !localDevelopment) return jsonResponse({ ok: false, error: "Sign in to BuildMyLogic before starting a VS Code session." }, 401);
+    if (authenticatedId && requestedId && authenticatedId !== requestedId) return jsonResponse({ ok: false, error: "Session user does not match the authenticated learner." }, 403);
+    body.user_id = authenticatedId ?? (requestedId || "local-builder");
+    try {
+      const session = startLearningSession(body);
+      return jsonResponse({ ok: true, session_id: session.sessionId, state: stateOf(session) });
+    } catch (error) { return jsonResponse({ ok: false, error: error instanceof Error ? error.message : "Could not start session." }, 400); }
   }
 
-  const eventMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/events$/);
-  if (request.method === "POST" && eventMatch) {
-    const sessionId = decodeURIComponent(eventMatch[1]);
-    const validated = validateVscodeSession(request, sessionId);
-    if (validated instanceof Response) return validated;
+  if (request.method === "POST" && pathname === "/api/sessions/connect") {
+    const body = await readJson(request); const state = connectLearningSession(body);
+    return state ? jsonResponse({ ok: true, session: state }) : jsonResponse({ ok: false, error: "Session ID was not found or has expired. Start a new session on the BuildMyLogic website." }, 404);
+  }
+
+  const learningMatch = pathname.match(/^\/api\/sessions\/([^/]+)(?:\/(events|test-result|hint|stuck|failed|complete|run-plan|submit|state))?$/);
+  if (learningMatch) {
+    const session = verifySession(decodeURIComponent(learningMatch[1] ?? "").toUpperCase(), learningMatch[2] === "state");
+    if (!session) return jsonResponse({ ok: false, error: "Invalid, expired, or unauthorized session." }, 401);
+    const action = learningMatch[2] ?? "state";
+    if (request.method === "GET" && action === "state") return jsonResponse({ ok: true, state: stateOf(session) });
+    if (request.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed." }, 405);
     const body = await readJson(request);
-    const eventType = clean(body.event_type, 80);
-    const payload = body.payload && typeof body.payload === "object" ? body.payload as Record<string, unknown> : {};
-    if (!eventType) return jsonResponse({ ok: false, error: "event_type is required." }, 400);
-    if (clean(body.session_id, 180) !== session.sessionId || clean(body.challenge_id, 180) !== session.challengeId || clean(body.user_id, 180) !== session.userId) {
-      return jsonResponse({ ok: false, error: "Session identity does not match the pairing." }, 403);
-    }
-    const event = {
-      schemaVersion: Number(body.schemaVersion ?? 2),
-      session_id: session.sessionId,
-      challenge_id: session.challengeId,
-      user_id: session.userId,
-      event_type: eventType,
-      timestamp: clean(body.timestamp, 80) || new Date().toISOString(),
-      payload,
-    };
-    session.events.push(event);
-    if (session.events.length > 500) session.events.splice(0, session.events.length - 500);
-    if (eventType === "session_ended") {
-      session.active = false;
-      session.endedAt = new Date().toISOString();
-    }
-    const evidence = summarizeEvent(eventType, payload);
-    const intervention = await maybeVibeIntervention(session, eventType, payload);
-    return jsonResponse({ ok: true, accepted: true, event_type: eventType, evidence, intervention });
+    try {
+      if (action === "events") return jsonResponse({ ok: true, state: recordEvent(session, clean(body.event_type, 80), body.payload && typeof body.payload === "object" ? body.payload as Record<string, unknown> : {}) });
+      if (action === "test-result") return jsonResponse({ ok: true, state: recordEvent(session, "test_result", body) });
+      if (action === "hint") return jsonResponse({ ok: true, ...(await getHint(session)) });
+      if (action === "stuck") return jsonResponse({ ok: true, ...(await getHint(session, true)) });
+      if (action === "failed") return jsonResponse({ ok: true, ...(await failSession(session, clean(body.reason, 1000))) });
+      if (action === "run-plan") return jsonResponse({ ok: true, run_plan: await getRunPlan(session, clean(body["platform"], 40) || "linux"), state: stateOf(session) });
+      if (action === "submit") return jsonResponse({ ok: true, ...(await submitProject(session, body["files"])) });
+      if (action === "complete") return jsonResponse({ ok: true, state: recordEvent(session, "test_result", { passed: 1, total: 1 }) });
+      return jsonResponse({ ok: false, error: "Unknown session action." }, 404);
+    } catch (error) { return jsonResponse({ ok: false, error: error instanceof Error ? error.message : "Could not update session." }, 400); }
   }
 
-  const contextMatch = pathname === "/api/vscode/context";
-  if (request.method === "POST" && contextMatch) {
-    const body = await readJson(request);
-    const sessionId = clean(body.session_id, 180);
-    if (!sessionId) return jsonResponse({ ok: false, error: "session_id is required." }, 400);
-    const validated = validateVscodeSession(request, sessionId);
-    if (validated instanceof Response) return validated;
-    const payload = body.payload && typeof body.payload === "object" ? body.payload as Record<string, unknown> : {};
-    const event = { ...body, session_id: session.sessionId, event_type: clean(body.event_type, 80) || "context", payload };
-    session.events.push(event);
-    if (session.events.length > 500) session.events.splice(0, session.events.length - 500);
-    return jsonResponse({ ok: true, accepted: true });
-  }
-
-  const sessionMatch = pathname.match(/^\/api\/vscode\/sessions\/([^/]+)$/);
-  if (request.method === "GET" && sessionMatch) {
-    const sessionId = decodeURIComponent(sessionMatch[1]);
-    const session = vscodeSessions.get(sessionId);
-    if (!session) return jsonResponse({ ok: false, error: "Session not found." }, 404);
-    return jsonResponse({ ok: true, session: { session_id: session.sessionId, challenge_id: session.challengeId, user_id: session.userId, active: session.active, started_at: session.startedAt, ended_at: session.endedAt, event_count: session.events.length } });
-  }
 
   return jsonResponse({ ok: false, error: "BuildMyLogic API endpoint not found." }, 404);
 }

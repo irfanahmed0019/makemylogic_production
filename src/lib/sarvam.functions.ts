@@ -17,7 +17,10 @@ function key(): string {
   // entry (src/server.ts) bridges env.SARVAM_API_KEY into process.env.
   const value = process.env["SARVAM_API_KEY"]?.trim();
   if (!value) {
-    throw new Error("Some error found.");
+    throw new Error("Sarvam AI is not configured. Add a valid SARVAM_API_KEY to the server environment and redeploy.");
+  }
+  if (/^(your_|sk_your|sk_placeholder|replace_with_)/i.test(value)) {
+    throw new Error("Sarvam AI is using a placeholder API key. Replace SARVAM_API_KEY with a valid key from the Sarvam dashboard and redeploy.");
   }
   return value;
 }
@@ -38,6 +41,30 @@ function profileBrief(profile: Profile): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function preferredStack(profile: Profile): string {
+  return profile.technologies.map((technology) => technology.name.trim()).filter(Boolean).join(", ") || "the learner's stated project requirements";
+}
+
+function selectedCStack(profile: Profile): boolean {
+  return profile.technologies.some((technology) => /(^|[^a-z])c([^a-z]|$)|c\+\+/i.test(technology.name));
+}
+
+function looksLikeCStarter(project: { title?: string; summary?: string; stack?: string; why?: string }): boolean {
+  return /\b(c language|gcc|clang|scanf|printf|main\.c|c calculator|cli (arithmetic )?calculator)\b/i.test(
+    `${project.title ?? ""} ${project.summary ?? ""} ${project.stack ?? ""} ${project.why ?? ""}`,
+  );
+}
+
+function requireSelectedStack<T extends { title?: string; summary?: string; stack?: string; why?: string }>(
+  profile: Profile,
+  result: T | T[],
+): T | T[] {
+  if (!selectedCStack(profile) && (Array.isArray(result) ? result : [result]).some(looksLikeCStarter)) {
+    throw new Error("The generated path did not match your selected stack. Please generate it again.");
+  }
+  return result;
 }
 
 const COACH =
@@ -93,6 +120,7 @@ ${profileBrief(data.profile)}`,
 export const aiSuggestProjects = createServerFn({ method: "POST" })
   .validator((input: { profile: Profile }) => input)
   .handler(async ({ data }) => {
+    const stack = preferredStack(data.profile);
     const isBeginner =
       data.profile.experience === "First time building" ||
       data.profile.experience === "Started but never finished" ||
@@ -104,16 +132,15 @@ export const aiSuggestProjects = createServerFn({ method: "POST" })
       ? `STRICT BEGINNER PROJECT REQUIREMENT:
 The builder is a true BEGINNER. They need accessible, practical, high-confidence starter projects.
 DO NOT suggest memory allocators, memory wrappers, compilers, kernels, order books, or systems software.
-YOU MUST SUGGEST 4 SIMPLE, PRACTICAL STARTER PROJECTS:
-1. "CLI Multi-Tool Calculator" (Stack: C, basic arithmetic, terminal I/O, error handling)
-2. "Student Marks & Grade Evaluator" (Stack: C, variables, averages, grade conditionals)
-3. "Number Guessing Game & Scoreboard" (Stack: C, loops, comparison logic, game state)
-4. "Personal Expense & Budget Logger" (Stack: C, totals, basic structure, persistence)
+YOU MUST SUGGEST 4 SIMPLE, PRACTICAL STARTER PROJECTS that use the learner's chosen technologies.
+The required stack is: ${stack}.
+Do not substitute C or a CLI project unless C is in that required stack or the learner explicitly asked for it.
 Return JSON: {"projects": [{"title": string, "summary": string (1 sentence), "stack": string, "why": string}]}`
       : `Research-informed project selection: propose 4 real-world project options that would create the strongest evidence for this person's stated goal.
+Use this declared technology stack whenever it is relevant: ${stack}. Do not replace it with C unless the learner selected C.
 Return JSON: {"projects": [{"title": string, "summary": string (1 sentence), "stack": string, "why": string}]}`;
 
-    return await import("./sarvam.server").then(({ sarvamJson }) =>
+    const result = await import("./sarvam.server").then(({ sarvamJson }) =>
       sarvamJson<{ projects: { title: string; summary: string; stack: string; why: string }[] }>(
         key(),
         COACH,
@@ -124,6 +151,8 @@ ${profileBrief(data.profile)}`,
         1200,
       ),
     );
+    requireSelectedStack(data.profile, result.projects ?? []);
+    return result;
   });
 
 const PLAN_SHAPE = `{
@@ -141,6 +170,7 @@ const PLAN_SHAPE = `{
 export const aiGeneratePlan = createServerFn({ method: "POST" })
   .validator((input: { profile: Profile }) => input)
   .handler(async ({ data }) => {
+    const stack = preferredStack(data.profile);
     const isBeginner =
       data.profile.experience === "First time building" ||
       data.profile.experience === "Started but never finished" ||
@@ -151,33 +181,34 @@ export const aiGeneratePlan = createServerFn({ method: "POST" })
     const planInstructions = isBeginner
       ? `STRICT BEGINNER BUILD PATH:
 The builder is a BEGINNER. You MUST start from the very beginning.
-DO NOT jump to memory allocators, memory wrappers, structs, pointers, or complex algorithms in early missions.
-The mission sequence MUST follow this exact staged ladder:
-- Mission 1 (Difficulty 0): Hello World & Program Structure (teaches printf, main, compilation)
-- Mission 2 (Difficulty 0): Variables & Numeric Types (teaches int, double, printf formatting)
-- Mission 3 (Difficulty 1): Terminal Input with scanf (teaches scanf, interactive prompt)
-- Mission 4 (Difficulty 1): Conditionals & Input Validation (teaches if/else, zero division guard)
-- Mission 5 (Difficulty 1): Loops & Repeated Execution (teaches while loop, repeat until quit)
-- Mission 6 (Difficulty 2): Modular Functions (teaches separate calculation functions)
-- Mission 7 (Difficulty 2): Complete Project Assembly (brings it all together into the final deliverable)
+The chosen project and stack below are non-negotiable. Every mission, skill, file convention, and final deliverable must directly support them. Do not change the project into a C calculator or use C/printf/scanf unless C is explicitly part of the selected stack.
+Use a beginner-friendly staged ladder adapted to the selected technology: setup and project structure, core language/framework fundamentals, user input or interaction, validation and state/control flow, repetition or data handling, reusable components/functions, then final project assembly.
+DO NOT jump to advanced architecture or complex algorithms in early missions.
 
 Return JSON exactly in this shape:
 ${PLAN_SHAPE}`
-      : `Design a complete personalised build path for this person. Every mission must be a step toward shipping their chosen project, sized to their daily window.
+      : `Design a complete personalised build path for this person. Every mission must be a step toward shipping their chosen project in the selected stack, sized to their daily window. Do not substitute another stack.
 Return JSON exactly in this shape:
 ${PLAN_SHAPE}`;
 
-    return await import("./sarvam.server").then(({ sarvamJson }) =>
+    const plan = await import("./sarvam.server").then(({ sarvamJson }) =>
       sarvamJson<Plan>(
         key(),
         COACH,
         `${planInstructions}
+
+DECLARED STACK: ${stack}
 
 PROFILE:
 ${profileBrief(data.profile)}`,
         3000,
       ),
     );
+    requireSelectedStack(data.profile, [
+      { title: plan.projectTitle, summary: plan.projectPitch },
+      ...(plan.missions ?? []).map((mission) => ({ title: mission.title, summary: mission.description, stack: mission.stack })),
+    ]);
+    return plan;
   });
 
 export const aiRetunePlan = createServerFn({ method: "POST" })

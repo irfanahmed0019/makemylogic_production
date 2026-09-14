@@ -54,6 +54,25 @@ export type CodeFile = { name: string; language: string; content: string };
 export type MissionProgress = { status: "locked" | "active" | "done"; completedSteps: number[]; code?: CodeFile[]; codeNotes?: string };
 export type ActivityItem = { at: number; text: string; kind: "mission" | "session" | "ai" | "skill" };
 export type SessionLog = { at: number; minutes: number; missionTitle: string; note: string; tasks?: SessionTask[]; completedTasks?: number[]; review?: SessionReview };
+export type BuildSessionState = {
+  session_id: string;
+  challenge_id: string;
+  title: string;
+  language: string;
+  concept: string;
+  instructions?: string;
+  status: string;
+  attempts: number;
+  hints_used: number;
+  test_score?: { passed: number; total: number };
+  latest_mentor_feedback?: string;
+  recovery?: string;
+  potential_struggle?: boolean;
+  struggle_signal?: string;
+  checkpoints?: Array<{ index: number; title: string; detail: string; status: "locked" | "active" | "passed" | "failed"; attempts: number; lastOutput?: string }>;
+  project_review?: { score: number; verdict: string; strengths: string[]; issues: string[]; missing: string[]; nextSteps: string[] };
+  run_guidance?: string;
+};
 
 // ── Three-Layer Memory Architecture ───────────────────────────────────────────
 
@@ -260,20 +279,15 @@ export const defaultStarterPlan: Plan = {
 };
 
 export const emptyState: LoopState = {
-  onboarded: true,
-  profile: defaultStarterProfile,
-  plan: defaultStarterPlan,
-  missionProgress: {
-    "cli-calculator": { status: "active", completedSteps: [] },
-    "memory-inspector": { status: "locked", completedSteps: [] },
-    "file-data-parser": { status: "locked", completedSteps: [] },
-  },
-  activity: [
-    { at: Date.now(), text: "Welcome to BuildMyLogic! Starter build path initialized.", kind: "ai" }
-  ],
+  // A new learner must start with onboarding. Keeping a sample plan here made
+  // every fresh browser session look like the same C calculator dashboard.
+  onboarded: false,
+  profile: null,
+  plan: null,
+  missionProgress: {},
+  activity: [],
   sessions: [],
   learningChats: {},
-  selectedLearningMissionId: "cli-calculator",
+  selectedLearningMissionId: null,
   skillMemory: {},
 };
-

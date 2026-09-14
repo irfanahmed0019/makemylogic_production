@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LoopState } from "./loop-types";
 import { loadLoopStateFromCloud, saveLoopStateToCloud, useAuth } from "./auth";
-import { getLoopState, setLoopState, useLoop } from "./loop-store";
+import { getLoopState, normalizeLoopState, setLoopState, useLoop } from "./loop-store";
 
 export function CloudSync() {
   const auth = useAuth();
@@ -18,9 +18,14 @@ export function CloudSync() {
       try {
         const cloud = await loadLoopStateFromCloud();
         if (cloud && typeof cloud === "object") {
-          const parsed = cloud as LoopState;
+          const parsed = normalizeLoopState(cloud as Partial<LoopState>);
           setLoopState(() => parsed);
           lastSaved.current = JSON.stringify(parsed);
+          // Replace the retired demo record as well, so it cannot return on a
+          // later device or browser session.
+          if (JSON.stringify(cloud) !== lastSaved.current) {
+            await saveLoopStateToCloud(parsed);
+          }
         } else {
           const local = getLoopState();
           await saveLoopStateToCloud(local);
@@ -56,4 +61,3 @@ export function CloudSync() {
 
   return null;
 }
-
