@@ -12,8 +12,11 @@ create table if not exists public.learning_sessions (
   status text not null check (status in ('active','connected','failed','completed','expired')),
   started_at timestamptz not null default now(), connected_at timestamptz,
   attempts integer not null default 0, hints_used integer not null default 0,
-  test_score jsonb, latest_mentor_feedback text, recovery text
+  test_score jsonb, latest_mentor_feedback text, recovery text,
+  -- Full runtime state lets a server instance restore a dynamic Session ID.
+  session_data jsonb not null default '{}'::jsonb
 );
+alter table public.learning_sessions add column if not exists session_data jsonb not null default '{}'::jsonb;
 create table if not exists public.learning_session_events (
   id bigint generated always as identity primary key,
   session_id text not null references public.learning_sessions(session_id) on delete cascade,

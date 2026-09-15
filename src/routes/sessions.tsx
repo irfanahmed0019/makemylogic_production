@@ -41,6 +41,7 @@ function Sessions() {
   const [vscodeSession, setVscodeSession] = useState<{ sessionId: string; status?: string } | null>(null);
   const [remoteState, setRemoteState] = useState<RemoteSessionState | null>(null);
   const [pickerError, setPickerError] = useState("");
+  const [copyNotice, setCopyNotice] = useState("");
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const startRef = useRef(planned * 60);
   const retuneKeyRef = useRef("");
@@ -54,7 +55,8 @@ function Sessions() {
     if (savedSession) {
       try {
         const parsed = JSON.parse(savedSession) as { sessionId?: string; status?: string };
-        if (parsed.sessionId) setVscodeSession(parsed.status ? { sessionId: parsed.sessionId, status: parsed.status } : { sessionId: parsed.sessionId });
+        if (parsed.sessionId && /^BML-[A-Z0-9]{5}$/i.test(parsed.sessionId)) setVscodeSession({ sessionId: parsed.sessionId, status: "waiting" });
+        else window.localStorage.removeItem("bml-vscode-session");
       } catch { window.localStorage.removeItem("bml-vscode-session"); }
     }
     folderInputRef.current?.setAttribute("webkitdirectory", "");
@@ -76,16 +78,10 @@ function Sessions() {
   useEffect(() => {
     if (window.localStorage.getItem("loop-auto-start-session") !== "1") return;
     window.localStorage.removeItem("loop-auto-start-session");
-    const duration = planned * 60;
-    startRef.current = duration;
-    setSeconds(duration);
-    setRunning(true);
-    window.localStorage.setItem("loop-session-started-at", String(Date.now()));
-    window.localStorage.setItem("loop-session-duration", String(duration));
-    const savedPath = window.localStorage.getItem("loop-vscode-path") ?? "";
-    if (savedPath) {
-      window.setTimeout(() => { void fetch(`${BRIDGE_URL}/open-vscode`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: savedPath }) }); }, 100);
-    }
+    // Use the same flow as the visible Start Session button. This means a
+    // mission launched from another page also selects a folder, creates the
+    // shared session, and opens the extension in that workspace.
+    window.setTimeout(() => { void startSession(); }, 0);
   }, []);
 
   useEffect(() => {
@@ -174,8 +170,8 @@ function Sessions() {
     anchor.remove();
   }
 
-  async function openVsCode(session?: { sessionId: string }) {
-    let path = workspacePath.trim();
+  async function openVsCode(session?: { sessionId: string }, selectedPath?: string) {
+    let path = (selectedPath ?? workspacePath).trim();
     if (!path) {
       // Keep the selected path in this local variable. React state updates are
       // asynchronous, so reading workspacePath immediately after the picker
@@ -195,6 +191,10 @@ function Sessions() {
       }).catch(() => null);
 
       if (response && response.ok) {
+        // The desktop bridge opens the selected folder and forwards the URI.
+        // Send the URI from the browser too so the extension dashboard opens
+        // and connects even when the second `code` process is delayed.
+        if (session) await connectExtension(session);
         return;
       }
       // Fallback: use native VS Code URI protocol handler
@@ -265,6 +265,15 @@ function Sessions() {
     window.localStorage.setItem("loop-vscode-path", value.trim());
   }
 
+  function restartSession() {
+    const duration = planned * 60;
+    startRef.current = duration;
+    setSeconds(duration);
+    setRunning(false);
+    window.localStorage.removeItem("loop-session-started-at");
+    window.localStorage.removeItem("loop-session-duration");
+  }
+
   function selectProjectFolder(files: FileList | null) {
     if (!files?.length) return;
     const first = files[0];
@@ -284,15 +293,17 @@ function Sessions() {
       return;
     }
     try {
-      const connected = forceNew ? await createVscodeSession() : vscodeSession ?? await createVscodeSession();
-      const startedAt = Date.now();
-      if (forceNew) setSeconds(startRef.current);
-      window.localStorage.setItem("loop-session-started-at", String(startedAt));
-      window.localStorage.setItem("loop-session-duration", String(seconds));
-      setRunning(true);
-      if (!vscodeSession) {
-        await openVsCode(connected);
+      const duration = forceNew ? startRef.current : seconds;
+      if (forceNew) {
+        setVscodeSession(null);
+        setRemoteState(null);
+        window.localStorage.removeItem("bml-vscode-session");
       }
+      const startedAt = Date.now();
+      if (forceNew) setSeconds(duration);
+      window.localStorage.setItem("loop-session-started-at", String(startedAt));
+      window.localStorage.setItem("loop-session-duration", String(duration));
+      setRunning(true);
     } catch (error) {
       setPickerError(error instanceof Error ? error.message : "Could not start the BuildMyLogic session.");
       setRunning(false);
@@ -301,14 +312,34 @@ function Sessions() {
 
   async function openAndConnectVsCode() {
     try {
-      const connected = vscodeSession ?? await createVscodeSession();
-      if (!workspacePath.trim()) {
-        const selected = await pickProjectFolder();
-        if (!selected) return;
-      }
-      await openVsCode(connected);
+      const selectedPath = workspacePath.trim() || window.localStorage.getItem("loop-vscode-path")?.trim() || await pickProjectFolder(true);
+      if (!selectedPath) return;
+      const hasFreshSession = Boolean(vscodeSession?.sessionId && /^BML-[A-Z0-9]{5}$/i.test(vscodeSession.sessionId));
+      const connected = hasFreshSession && vscodeSession ? vscodeSession : await createVscodeSession();
+      await openVsCode(connected, selectedPath);
     } catch (error) {
       setPickerError(error instanceof Error ? error.message : "Could not connect VS Code.");
+    }
+  }
+
+  async function copySessionId() {
+    if (!vscodeSession) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(vscodeSession.sessionId);
+      } else {
+        const input = document.createElement("textarea");
+        input.value = vscodeSession.sessionId;
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      setCopyNotice("Session ID copied. Paste it into the BuildMyLogic extension in VS Code.");
+    } catch {
+      setCopyNotice("Copy failed. Select the Session ID and copy it manually.");
     }
   }
 
@@ -384,15 +415,15 @@ function Sessions() {
           <div className="flex items-center justify-between"><div><p className="text-[11px] font-black uppercase tracking-wider text-primary">Current session</p><h2 className="mt-1 text-xl font-black">{activeMission?.title ?? "Your build"}</h2></div><span className="pill bg-primary-soft text-black">{running ? "✦ Live Now" : seconds < startRef.current ? "Ⅱ Paused" : "○ Ready"}</span></div>
           <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="flex gap-4"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-black text-white"><Code2 className="h-7 w-7" /></div><div className="min-w-0 flex-1"><p className="text-sm font-black">{activeMission?.stack ?? "Build"} <span className="mx-1">•</span> Difficulty {activeMission?.difficulty ?? 1}</p><p className="mt-2 text-sm font-semibold">{activeMission?.description ?? "Build something useful and prove what you learned."}</p><div className="mt-4 h-2.5 rounded-full bg-black/10"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div><div className="mt-2 flex justify-between text-xs font-black"><span>{elapsed} min elapsed</span><span>{Math.max(0, Math.ceil(seconds / 60))} min remaining</span></div></div></div>
-            <div className="border-t-2 border-black/10 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-5"><p className="text-xs font-black">Tests / Tasks Passed</p><p className="display text-2xl font-black">{done.length} / {currentTasks.length}</p><p className="mt-4 text-xs font-black">Attempts</p><p className="text-xl font-black">{Math.max(1, state.sessions.length + 1)}</p><button type="button" onClick={() => { void startSession(); }} className="btn-base btn-ink mt-4 w-full">{running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}{running ? "Pause" : "Start Session"}</button><button type="button" onClick={() => { void openAndConnectVsCode(); }} className="btn-base btn-outline mt-2 w-full"><Code2 className="h-4 w-4" />Open VS Code</button><button type="button" onClick={() => { setRunning(false); setSeconds(startRef.current); }} className="btn-base btn-outline mt-2 w-full"><RotateCcw className="h-3.5 w-3.5" />Reset</button></div>
+            <div className="border-t-2 border-black/10 pt-4 lg:border-l-2 lg:border-t-0 lg:pl-5"><p className="text-xs font-black">Tests / Tasks Passed</p><p className="display text-2xl font-black">{done.length} / {currentTasks.length}</p><p className="mt-4 text-xs font-black">Attempts</p><p className="text-xl font-black">{Math.max(1, state.sessions.length + 1)}</p><button type="button" onClick={() => { void startSession(); }} className="btn-base btn-ink mt-4 w-full">{running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}{running ? "Pause" : "Start Session"}</button><button type="button" onClick={() => { void openAndConnectVsCode(); }} className="btn-base btn-outline mt-2 w-full"><Code2 className="h-4 w-4" />Open VS Code</button><button type="button" onClick={restartSession} className="btn-base btn-outline mt-2 w-full"><RotateCcw className="h-3.5 w-3.5" />Restart your session</button></div>
           </div>
         </section>
 
         {vscodeSession && <section className="card-surface border-2 border-primary/30 bg-primary-soft/30 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[11px] font-black uppercase tracking-wider text-primary">BuildMyLogic ↔ VS Code</p><h2 className="mt-1 text-lg font-black">{remoteState?.title ?? activeMission?.title}</h2></div><span className={`rounded-full px-3 py-1 text-xs font-black ${extensionStatus === "completed" || extensionConnected ? "bg-emerald-100 text-emerald-800" : extensionStatus === "failed" || extensionStatus === "disconnected" ? "bg-amber-100 text-amber-800" : "bg-white text-black/60"}`}>● {sessionLabel}</span></div><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-xl bg-white p-3"><p className="text-[10px] font-black uppercase text-black/50">Attempts</p><p className="mt-1 text-xl font-black">{remoteState?.attempts ?? 0}</p></div><div className="rounded-xl bg-white p-3"><p className="text-[10px] font-black uppercase text-black/50">Tests</p><p className="mt-1 text-xl font-black">{score}</p></div><div className="rounded-xl bg-white p-3"><p className="text-[10px] font-black uppercase text-black/50">Hints</p><p className="mt-1 text-xl font-black">{remoteState?.hints_used ?? 0}</p></div><div className="rounded-xl bg-white p-3"><p className="text-[10px] font-black uppercase text-black/50">Learning state</p><p className="mt-1 text-sm font-black">{remoteState?.status === "completed" ? "Skill proven ✓" : remoteState?.potential_struggle ? "Needs attention" : remoteState?.status ?? "active"}</p></div></div>{remoteState?.latest_mentor_feedback && <p className="mt-4 rounded-xl bg-black px-4 py-3 text-sm font-bold text-white">Vibe: {remoteState.latest_mentor_feedback}</p>}</section>}
 
-        <SessionTasks remote={remoteState?.checkpoints} fallback={currentTasks} done={done} onToggle={(index) => setDone((prev) => prev.includes(index) ? prev.filter((x) => x !== index) : [...prev, index])} />
+        <SessionTasks remote={remoteState?.checkpoints ?? []} fallback={currentTasks} done={done} onToggle={(index) => setDone((prev) => prev.includes(index) ? prev.filter((x) => x !== index) : [...prev, index])} />
 
-        <section className="card-surface p-5"><div className="flex items-center justify-between"><h2 className="text-lg font-black">Upcoming Sessions</h2><span className="text-xs font-black">View All →</span></div><div className="mt-3 divide-y divide-black/10">{missions.slice(1, 3).map((mission) => <div key={mission.id} className="flex items-center gap-4 py-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black text-white"><Timer className="h-5 w-5" /></div><div className="min-w-0 flex-1"><p className="text-sm font-black">{mission.title}</p><p className="mt-1 text-xs font-semibold">{mission.stack} · Difficulty {mission.difficulty} · Tomorrow, {state.profile?.startTime ?? "19:00"}</p><p className="mt-1 text-xs font-semibold">{mission.description}</p></div><button type="button" onClick={() => { setRunning(true); window.localStorage.setItem("loop-auto-start-session", "1"); openVsCode(); }} className="btn-base btn-outline hidden md:inline-flex">Start Session</button></div>)}</div></section>
+        <section className="card-surface p-5"><div className="flex items-center justify-between"><h2 className="text-lg font-black">Upcoming Sessions</h2><span className="text-xs font-black">View All →</span></div><div className="mt-3 divide-y divide-black/10">{missions.slice(1, 3).map((mission) => <div key={mission.id} className="flex items-center gap-4 py-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black text-white"><Timer className="h-5 w-5" /></div><div className="min-w-0 flex-1"><p className="text-sm font-black">{mission.title}</p><p className="mt-1 text-xs font-semibold">{mission.stack} · Difficulty {mission.difficulty} · Tomorrow, {state.profile?.startTime ?? "19:00"}</p><p className="mt-1 text-xs font-semibold">{mission.description}</p></div><button type="button" onClick={() => { void startSession(); }} className="btn-base btn-outline hidden md:inline-flex">Start Session</button></div>)}</div></section>
 
         <section><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-black">Past Sessions</h2><span className="text-xs font-black">{total} min total</span></div><div className="card-surface overflow-hidden">{state.sessions.length === 0 ? <p className="p-6 text-center text-sm font-bold">No past sessions yet. Your first completed session will appear here.</p> : state.sessions.slice(0, 8).map((item) => { const open = selectedHistory === item.at; return <div key={item.at} className="border-b border-black/10 last:border-0"><button type="button" onClick={() => setSelectedHistory(open ? null : item.at)} className="grid w-full grid-cols-[1fr_1.6fr_.7fr_.8fr_28px] items-center gap-3 px-4 py-4 text-left hover:bg-primary-soft/40"><span className="text-xs font-black">{new Date(item.at).toLocaleDateString()}</span><span className="truncate text-xs font-black">{item.missionTitle}</span><span className="text-xs font-black">{item.minutes} min</span><span className="flex items-center gap-1 text-xs font-black"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />Completed</span><ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} /></button>{open && <div className="bg-black p-5 text-white"><p className="text-[11px] font-black uppercase tracking-wider text-white">Session history</p><p className="mt-2 text-sm font-black">{item.note || "No note added."}</p>{item.completedTasks?.length ? <p className="mt-3 text-xs font-bold">Tasks completed: {item.completedTasks.length}/{item.tasks?.length ?? 0}</p> : null}{item.review && <div className="mt-4 grid gap-3 md:grid-cols-3"><div><p className="text-[10px] font-black uppercase">What BuildMyLogic saw</p><p className="mt-1 text-xs font-bold">{item.review.feedback}</p></div><div><p className="text-[10px] font-black uppercase">Next</p><p className="mt-1 text-xs font-bold">{item.review.nextStep}</p></div><div><p className="text-[10px] font-black uppercase">Skill</p><p className="mt-1 text-xs font-bold">{item.review.skillBoost}</p></div></div>}</div>}</div>; })}</div></section>
 
@@ -407,10 +438,10 @@ function Sessions() {
       <aside className="space-y-5">
         <section className="card-surface p-5"><div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft text-primary"><Flame className="h-6 w-6" /></span><div><p className="text-sm font-black">Session Streak</p><p className="display text-2xl font-black">{streak(state.sessions)} days</p></div></div><p className="mt-2 text-xs font-semibold">Consistency compounds.</p></section>
         <section className="card-surface p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-black">{new Date().toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2><CalendarDays className="h-4 w-4" /></div><MiniCalendar sessions={state.sessions} progress={pct} running={running} /></section>
-        <section className="card-surface border-2 border-black/10 p-5"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-black">Session ID</h2><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black ${vscodeSession?.status === "active" || vscodeSession?.status === "connected" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}><span className={`h-2 w-2 rounded-full ${vscodeSession?.status === "active" || vscodeSession?.status === "connected" ? "bg-emerald-500" : "bg-red-500"}`} />{vscodeSession?.status === "active" || vscodeSession?.status === "connected" ? "Connected" : "Not connected"}</span></div>{vscodeSession ? <><button type="button" title="Click to copy session ID" aria-label="Copy session ID" onClick={() => void navigator.clipboard.writeText(vscodeSession.sessionId)} className="mt-3 flex min-h-16 w-full items-center justify-center rounded-xl bg-black px-3 py-3 text-center text-2xl font-black tracking-[0.08em] text-white shadow-sm transition hover:bg-primary hover:text-black">{vscodeSession.sessionId}</button><p className="mt-2 text-center text-[10px] font-black uppercase tracking-wider text-black/60">Click the ID to copy</p></> : <p className="mt-3 rounded-xl bg-black/[0.04] px-3 py-4 text-center text-xs font-semibold text-black/55">Start a session to generate an ID.</p>}</section>
+        <section className="card-surface border-2 border-black/10 p-5"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-black">Session ID</h2><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black ${vscodeSession?.status === "active" || vscodeSession?.status === "connected" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}><span className={`h-2 w-2 rounded-full ${vscodeSession?.status === "active" || vscodeSession?.status === "connected" ? "bg-emerald-500" : "bg-red-500"}`} />{vscodeSession?.status === "active" || vscodeSession?.status === "connected" ? "Connected" : "Not connected"}</span></div>{vscodeSession ? <><button type="button" title="Click to copy session ID" aria-label="Copy session ID" onClick={() => { void copySessionId(); }} className="mt-3 flex min-h-16 w-full items-center justify-center rounded-xl bg-black px-3 py-3 text-center text-2xl font-black tracking-[0.08em] text-white shadow-sm transition hover:bg-primary hover:text-black">{vscodeSession.sessionId}</button><p className="mt-2 text-center text-[10px] font-black uppercase tracking-wider text-black/60">Click the ID to copy</p>{copyNotice && <p className="mt-2 text-center text-[10px] font-bold text-emerald-700">{copyNotice}</p>}</> : <p className="mt-3 rounded-xl bg-black/[0.04] px-3 py-4 text-center text-xs font-semibold text-black/55">Open VS Code to generate an ID.</p>}</section>
         <section className="card-surface p-5"><h2 className="text-sm font-black">Session Insights</h2><div className="mt-3 rounded-xl bg-primary-soft p-4"><p className="text-sm font-black">{state.sessions.length ? "You are building a real history." : "Your first session starts the history."}</p><p className="mt-2 text-xs font-semibold">Average logged time: {state.sessions.length ? Math.round(total / state.sessions.length) : 0} minutes.</p></div></section>
         <section className="card-surface p-5"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><h2 className="text-sm font-black">Tips from Vibe</h2></div><p className="mt-3 text-sm font-semibold">“Consistency beats intensity. Even a small session can move a skill forward.”</p><p className="mt-2 text-xs font-black">— Vibe</p></section>
-        <section className="card-surface p-5"><h2 className="text-sm font-black">Code with VS Code</h2><p className="mt-1 text-sm font-semibold">BuildMyLogic opens the selected project and connects the existing extension to this same Session ID.</p>{vscodeSession && <div className="mt-3 rounded-xl border border-primary/30 bg-primary-soft p-3"><p className="text-[10px] font-black uppercase tracking-wider">Build session</p><p className="mt-2 flex items-center gap-1.5 text-[10px] font-bold"><span className={`h-2 w-2 rounded-full ${vscodeSession.status === "active" || vscodeSession.status === "connected" ? "bg-emerald-500" : "bg-red-500"}`} />{vscodeSession.status === "active" || vscodeSession.status === "connected" ? "VS Code connected." : "Paste this Session ID into the extension."}</p></div>}<button type="button" onClick={() => { void pickProjectFolder(); }} disabled={pickingProject} className="btn-base btn-outline mt-3 w-full disabled:cursor-wait disabled:opacity-60"><FolderOpen className="h-4 w-4" />{pickingProject ? "Selecting…" : workspacePath ? "Change project folder" : "Select project folder"}</button><div className="mt-3 rounded-xl border border-black/10 bg-black/[0.02] px-3 py-2.5"><p className="text-[10px] font-black uppercase tracking-wider text-black/45">Workspace</p><p className="mt-1 break-all text-xs font-bold">{workspacePath || "No project selected"}</p></div><p className="mt-2 text-[10px] font-bold">The extension uses only the BuildMyLogic Session ID to join the same challenge.</p></section>
+        <section className="card-surface p-5"><h2 className="text-sm font-black">Code with VS Code</h2><p className="mt-1 text-sm font-semibold">Open VS Code launches the extension in your selected project. Starting the timer does not open VS Code.</p>{vscodeSession && <div className="mt-3 rounded-xl border border-primary/30 bg-primary-soft p-3"><p className="text-[10px] font-black uppercase tracking-wider">Build session</p><p className="mt-2 flex items-center gap-1.5 text-[10px] font-bold"><span className={`h-2 w-2 rounded-full ${vscodeSession.status === "active" || vscodeSession.status === "connected" ? "bg-emerald-500" : "bg-red-500"}`} />{vscodeSession.status === "active" || vscodeSession.status === "connected" ? "VS Code connected." : "Paste this Session ID into the extension."}</p></div>}<button type="button" onClick={() => { void openAndConnectVsCode(); }} disabled={pickingProject} className="btn-base btn-outline mt-3 w-full disabled:cursor-wait disabled:opacity-60"><Code2 className="h-4 w-4" />Open VS Code</button><button type="button" onClick={() => { void pickProjectFolder(true); }} disabled={pickingProject} className="btn-base btn-outline mt-2 w-full disabled:cursor-wait disabled:opacity-60"><FolderOpen className="h-4 w-4" />{pickingProject ? "Selecting…" : "Change your project folder"}</button><div className="mt-3 rounded-xl border border-black/10 bg-black/[0.02] px-3 py-2.5"><p className="text-[10px] font-black uppercase tracking-wider text-black/45">Selected folder</p><p className="mt-1 break-all text-xs font-bold">{workspacePath || "No project selected"}</p></div><p className="mt-2 text-[10px] font-bold">Open VS Code uses this selected folder and the active Session ID.</p></section>
       </aside>
     </div>
   </AppShell>;

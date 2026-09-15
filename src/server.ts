@@ -88,19 +88,19 @@ async function handleBuildMyLogicApi(request: Request): Promise<Response | null>
     if (authenticatedId && requestedId && authenticatedId !== requestedId) return jsonResponse({ ok: false, error: "Session user does not match the authenticated learner." }, 403);
     body.user_id = authenticatedId ?? (requestedId || "local-builder");
     try {
-      const session = startLearningSession(body);
+      const session = await startLearningSession(body);
       return jsonResponse({ ok: true, session_id: session.sessionId, state: stateOf(session) });
     } catch (error) { return jsonResponse({ ok: false, error: error instanceof Error ? error.message : "Could not start session." }, 400); }
   }
 
   if (request.method === "POST" && pathname === "/api/sessions/connect") {
-    const body = await readJson(request); const state = connectLearningSession(body);
+    const body = await readJson(request); const state = await connectLearningSession(body);
     return state ? jsonResponse({ ok: true, session: state }) : jsonResponse({ ok: false, error: "Session ID was not found or has expired. Start a new session on the BuildMyLogic website." }, 404);
   }
 
   const learningMatch = pathname.match(/^\/api\/sessions\/([^/]+)(?:\/(events|test-result|hint|stuck|failed|complete|run-plan|submit|state))?$/);
   if (learningMatch) {
-    const session = verifySession(decodeURIComponent(learningMatch[1] ?? "").toUpperCase(), learningMatch[2] === "state");
+    const session = await verifySession(decodeURIComponent(learningMatch[1] ?? "").toUpperCase(), learningMatch[2] === "state");
     if (!session) return jsonResponse({ ok: false, error: "Invalid, expired, or unauthorized session." }, 401);
     const action = learningMatch[2] ?? "state";
     if (request.method === "GET" && action === "state") return jsonResponse({ ok: true, state: stateOf(session) });
@@ -159,6 +159,10 @@ export default {
       const sarvamApiKey = runtimeEnv?.SARVAM_API_KEY;
       if (typeof sarvamApiKey === "string" && sarvamApiKey.trim()) {
         process.env.SARVAM_API_KEY = sarvamApiKey;
+      }
+      for (const name of ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]) {
+        const value = runtimeEnv?.[name];
+        if (typeof value === "string" && value.trim()) process.env[name] = value;
       }
 
       const apiResponse = await handleBuildMyLogicApi(request);

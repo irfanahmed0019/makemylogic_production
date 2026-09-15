@@ -26,6 +26,71 @@ const text = (value: unknown, max = 1000) => String(value ?? "").trim().slice(0,
 const code = () => `BML-${Array.from(crypto.getRandomValues(new Uint8Array(5)), x => (x % 36).toString(36).toUpperCase()).join("")}`;
 const checkpointText = (value: unknown) => String(value ?? "").replace(/^\s*(?:•|-|\d+[.)])\s*/, "").trim().slice(0, 1000);
 
+type SupabaseSessionRow = { session_data?: unknown };
+
+function supabaseAdminConfig() {
+  const url = process.env["VITE_SUPABASE_URL"]?.trim().replace(/\/$/, "");
+  const key = process.env["SUPABASE_SERVICE_ROLE_KEY"]?.trim();
+  return url && key ? { url, key } : undefined;
+}
+
+async function persistSession(session: LearningSession): Promise<void> {
+  const config = supabaseAdminConfig();
+  if (!config) return;
+  const userId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(session.userId) ? session.userId : null;
+  try {
+    const response = await fetch(`${config.url}/rest/v1/learning_sessions`, {
+      method: "POST",
+      headers: {
+        apikey: config.key,
+        authorization: `Bearer ${config.key}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        session_id: session.sessionId,
+        user_id: userId,
+        challenge_id: session.challengeId,
+        title: session.title,
+        language: session.language,
+        concept: session.concept,
+        instructions: session.instructions,
+        expected_skills: session.expectedSkills,
+        status: session.status,
+        started_at: session.startedAt,
+        connected_at: session.connectedAt ?? null,
+        attempts: session.attempts,
+        hints_used: session.hintsUsed,
+        test_score: session.testScore ?? null,
+        latest_mentor_feedback: session.latestFeedback ?? null,
+        recovery: session.recovery ?? null,
+        session_data: session,
+      }),
+    });
+    if (!response.ok) console.warn("Supabase learning session save failed:", await response.text());
+  } catch (error) {
+    console.warn("Supabase learning session save exception:", error);
+  }
+}
+
+async function restoreSession(sessionId: string): Promise<LearningSession | undefined> {
+  const config = supabaseAdminConfig();
+  if (!config) return undefined;
+  try {
+    const response = await fetch(`${config.url}/rest/v1/learning_sessions?session_id=eq.${encodeURIComponent(sessionId)}&select=session_data`, {
+      headers: { apikey: config.key, authorization: `Bearer ${config.key}` },
+    });
+    if (!response.ok) return undefined;
+    const rows = await response.json() as SupabaseSessionRow[];
+    const saved = rows[0]?.session_data;
+    if (!saved || typeof saved !== "object") return undefined;
+    const session = saved as LearningSession;
+    return session.sessionId === sessionId ? session : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function makeCheckpoints(body: Record<string, unknown>, instructions: string) {
   const raw = Array.isArray(body["checkpoints"]) ? body["checkpoints"] : [];
   const source = raw.length ? raw : instructions.split(/\n+/).filter((line) => /^\s*(?:•|-|\d+[.)])\s+/.test(line));
@@ -38,7 +103,7 @@ function makeCheckpoints(body: Record<string, unknown>, instructions: string) {
   return checkpoints.length ? checkpoints : [{ index: 0, title: "Complete the challenge", detail: "Build the requested project and verify it locally.", status: "active" as const, attempts: 0 }];
 }
 
-export function startLearningSession(body: Record<string, unknown>): LearningSession {
+export async function startLearningSession(body: Record<string, unknown>): Promise<LearningSession> {
   const challengeId = text(body["challenge_id"] ?? body["challengeId"], 180);
   if (!challengeId) throw new Error("challenge_id is required.");
   let sessionId = code(); while (sessions.has(sessionId)) sessionId = code();
@@ -53,11 +118,14 @@ export function startLearningSession(body: Record<string, unknown>): LearningSes
     potentialStruggle: false, checkpoints: makeCheckpoints(body, instructions), events: [],
   };
   const configuredTest = text(body["test_command"], 500); if (configuredTest) session.testCommand = configuredTest;
-  sessions.set(sessionId, session); return session;
+  sessions.set(sessionId, session);
+  await persistSession(session);
+  return session;
 }
 
-export function verifySession(sessionId: string, allowFinished = false): LearningSession | undefined {
-  const session = sessions.get(sessionId);
+export async function verifySession(sessionId: string, allowFinished = false): Promise<LearningSession | undefined> {
+  const session = sessions.get(sessionId) ?? await restoreSession(sessionId);
+  if (session && !sessions.has(sessionId)) sessions.set(sessionId, session);
   if (!session || Date.now() - Date.parse(session.startedAt) > SESSION_TTL_MS) {
     if (session) session.status = "expired";
     return undefined;
@@ -85,10 +153,11 @@ function compact(session: LearningSession) {
     extension_status: extensionStatus };
 }
 
-export function connectLearningSession(body: Record<string, unknown>) {
-  const sessionId = text(body["session_id"], 40).toUpperCase(); const session = verifySession(sessionId);
+export async function connectLearningSession(body: Record<string, unknown>) {
+  const sessionId = text(body["session_id"], 40).toUpperCase(); const session = await verifySession(sessionId);
   if (!session) return undefined;
   session.status = "connected"; session.connectedAt ??= new Date().toISOString(); session.lastSeenAt = new Date().toISOString();
+  await persistSession(session);
   return compact(session);
 }
 
@@ -187,6 +256,7 @@ export function recordEvent(session: LearningSession, eventType: string, payload
     if (total > 0 && passed >= total) session.status = "completed";
   }
   if (eventType === "session_ended") session.status = "expired";
+  void persistSession(session);
   return stateOf(session);
 }
 
@@ -211,11 +281,12 @@ export async function getRunPlan(session: LearningSession, platform: string) {
   if (apiKey) {
     try {
       const answer = await sarvamJson<{ guidance?: string }>(apiKey,
-        "You are a developer tooling mentor. Return JSON only: {\"guidance\":\"...\"}. Explain briefly how to run this project on the requested operating system. Never invent files or claim a command is safe if it is not obvious.",
+        "You are Vibe, a smart but very friendly developer mentor. Use very simple English, short sentences, and common words that a young child can understand. Understand Manglish (Malayalam written in English) and reply with gentle Manglish plus clear English when the learner uses it. Return JSON only: {\"guidance\":\"...\"}. Explain briefly how to run this project. Never invent files or claim a command is safe if it is not obvious.",
         JSON.stringify({ language: session.language, platform, challenge: session.title, instructions: session.instructions, safe_command: fallback.command }), 300);
       session.runGuidance = text(answer.guidance, 1000) || fallback.guidance;
     } catch { session.runGuidance = fallback.guidance; }
   } else session.runGuidance = fallback.guidance;
+  await persistSession(session);
   return { command: fallback.command, guidance: session.runGuidance, platform };
 }
 
@@ -232,12 +303,13 @@ export async function submitProject(session: LearningSession, files: unknown) {
   if (apiKey) {
     try {
       const answer = await sarvamJson<typeof fallback>(apiKey,
-        "You are Vibe, a fair programming mentor. Return JSON only with score (0-100), verdict, strengths, issues, missing and nextSteps arrays. Review evidence, do not invent test results, and give concrete beginner-friendly next steps.",
+        "You are Vibe, a fair and kind programming mentor. Use very simple English, short sentences, and common words. Understand Manglish (Malayalam written in English) and reply with gentle Manglish plus clear English when useful. Return JSON only with score (0-100), verdict, strengths, issues, missing and nextSteps arrays. Review evidence, do not invent test results, and give concrete beginner-friendly next steps.",
         JSON.stringify({ challenge: session.title, language: session.language, checkpoints: session.checkpoints, files: names, code_samples: accepted.slice(0, 12).map((file) => ({ path: file.path, content: file.content.slice(0, 1200) })) }), 700);
       session.projectReview = { ...fallback, ...answer, score: Math.max(0, Math.min(100, Number(answer.score ?? fallback.score))) };
     } catch { session.projectReview = fallback; }
   } else session.projectReview = fallback;
   session.events.push({ eventType: "project_submitted", at: new Date().toISOString(), payload: { files: accepted.length, bytes: totalBytes } });
+  await persistSession(session);
   return { review: session.projectReview, state: stateOf(session), file_count: accepted.length };
 }
 
@@ -253,7 +325,7 @@ async function mentor(session: LearningSession, level: "hint" | "stuck" | "recov
   const apiKey = process.env["SARVAM_API_KEY"]?.trim(); if (!apiKey) return fallback;
   try {
     const answer = await sarvamJson<{ guidance?: string }>(apiKey,
-      "You are Vibe, a patient beginner programming mentor. Return JSON only: {\"guidance\":\"...\"}. Do not give a complete solution. Ask one thinking question and give a progressively stronger, concise hint.",
+      "You are Vibe, a patient beginner programming mentor. Use very simple English and short sentences. Understand Manglish (Malayalam written in English) and reply with gentle Manglish plus clear English when useful. Return JSON only: {\"guidance\":\"...\"}. Do not give a complete solution. Ask one thinking question and give a progressively stronger, concise hint.",
       JSON.stringify({ level, language: session.language, challenge: session.title, current_concept: session.concept, error: recentError(session), attempts: session.attempts, test_score: session.testScore ? `${session.testScore.passed}/${session.testScore.total}` : "not run", previous_hints: session.hintsUsed, known_concepts: session.expectedSkills }), 400);
     return text(answer.guidance, 1200) || fallback;
   } catch { return fallback; }
@@ -262,11 +334,13 @@ async function mentor(session: LearningSession, level: "hint" | "stuck" | "recov
 export async function getHint(session: LearningSession, stuck = false) {
   if (stuck) recordEvent(session, "stuck", {}); else session.hintsUsed += 1;
   const guidance = await mentor(session, stuck ? "stuck" : "hint"); session.latestFeedback = guidance;
+  await persistSession(session);
   return { guidance, intervention_level: stuck ? "guided" : session.hintsUsed > 1 ? "stronger_hint" : "hint", state: stateOf(session) };
 }
 
 export async function failSession(session: LearningSession, reason: string) {
   session.status = "failed"; const guidance = await mentor(session, "recovery"); session.recovery = guidance; session.latestFeedback = guidance;
   session.events.push({ eventType: "failed", at: new Date().toISOString(), payload: { reason: text(reason, 1000), attempts: session.attempts, test_score: session.testScore, hints_used: session.hintsUsed } });
+  await persistSession(session);
   return { recovery: guidance, mini_task: `Write one ${session.language} condition that protects the failing case before retrying ${session.title}.`, state: stateOf(session) };
 }

@@ -1,14 +1,14 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { LayoutGrid, BookOpen, Rocket, Sparkles, TrendingUp, Timer, Settings as SettingsIcon, LogOut, Bell, RefreshCw, ChevronDown } from "lucide-react";
-import { aiRetunePlan } from "@/lib/sarvam.functions";
-import { logActivity, resetLoop, setLoopState, useLoop } from "@/lib/loop-store";
+import { LayoutGrid, BookOpen, Rocket, Sparkles, TrendingUp, Timer, Settings as SettingsIcon, LogOut, Bell, ChevronDown, MessageCircle } from "lucide-react";
+import { resetLoop, setLoopState, useLoop } from "@/lib/loop-store";
 import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { signOut, useAuth } from "@/lib/auth";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { to: "/learn", label: "Learn", icon: BookOpen },
+  { to: "/mentor", label: "Chatbot", icon: MessageCircle },
   { to: "/missions", label: "Missions", icon: Rocket },
   { to: "/skills", label: "Skills", icon: Sparkles },
   { to: "/progress", label: "Progress", icon: TrendingUp },
@@ -19,7 +19,6 @@ export function AppShell({ crumb, title, subtitle, quote, children, wide = false
   const state = useLoop();
   const auth = useAuth();
   const navigate = useNavigate();
-  const [tuning, setTuning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const name = state.profile?.name?.trim() || "Builder";
 
@@ -31,25 +30,6 @@ export function AppShell({ crumb, title, subtitle, quote, children, wide = false
       }));
     }
   }, [auth, state.profile]);
-
-  async function retune() {
-    if (!state.plan || !state.profile || tuning) return;
-    setTuning(true);
-    setNotice("Reading how you have been building…");
-    try {
-      const plan = await aiRetunePlan({ data: { profile: state.profile, plan: state.plan, activity: state.activity } });
-      const evidenceByName = new Map(state.plan.skills.map((skill) => [skill.name.toLowerCase(), skill.level]));
-      const evidencePlan = { ...plan, skills: (plan.skills ?? []).map((skill) => ({ ...skill, level: evidenceByName.get(skill.name.toLowerCase()) ?? 0, note: evidenceByName.has(skill.name.toLowerCase()) ? skill.note : "No BuildMyLogic evidence yet. Build and prove it." })) };
-      setLoopState((prev) => ({ ...prev, plan: evidencePlan }));
-      logActivity({ kind: "ai", text: "AI re-tuned your missions, skills and session plan" });
-      setNotice("Your path was rebuilt around your latest performance.");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not re-tune right now.");
-    } finally {
-      setTuning(false);
-      setTimeout(() => setNotice(null), 5000);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -85,10 +65,6 @@ export function AppShell({ crumb, title, subtitle, quote, children, wide = false
           <button type="button" onClick={() => setNotice(`${state.activity.length} updates in your build log.`)} aria-label="Notifications" className="relative rounded-full p-2 text-foreground hover:bg-muted">
             <Bell className="h-[21px] w-[21px]" strokeWidth={1.8} />
             {state.activity.length > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}
-          </button>
-          <div className="h-7 w-px bg-border" />
-          <button type="button" onClick={retune} disabled={tuning} className="hidden items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground md:flex">
-            <RefreshCw className={`h-3.5 w-3.5 ${tuning ? "animate-spin" : ""}`} /> {tuning ? "Updating…" : "AI tune"}
           </button>
           <div className="flex items-center gap-3">
             {!auth && <GoogleSignIn compact />}

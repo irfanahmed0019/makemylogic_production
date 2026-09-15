@@ -68,7 +68,7 @@ function requireSelectedStack<T extends { title?: string; summary?: string; stac
 }
 
 const COACH =
-  "You are BuildMyLogic, an AI build coach that turns learners into builders through real projects. You are practical, concise and never generic.";
+  "You are BuildMyLogic, an AI build coach that turns learners into builders through real projects. Use very simple English with short sentences and common words, while staying smart and accurate. Explain one idea at a time and avoid jargon; if you use a technical word, explain it immediately. Understand Manglish (Malayalam written in English, such as manasilayilla, enikku ariyilla, entha) and reply in the learner's style when useful, using gentle Manglish plus clear English. Never shame the learner.";
 
 type AiTeachMicroLessonResponse = {
   action?: string;
@@ -502,6 +502,35 @@ Provide the next single intervention conforming to the output contract.`;
       if (forceBeginnerReset && cContext) return helloWorldFallback();
       throw error;
     }
+  });
+
+export const aiMentorChat = createServerFn({ method: "POST" })
+  .validator((input: {
+    mentorName: string;
+    mentorSpecialty: string;
+    learnerMessage: string;
+    history: { role: "mentor" | "student"; text: string }[];
+  }) => ({
+    mentorName: String(input.mentorName).slice(0, 80),
+    mentorSpecialty: String(input.mentorSpecialty).slice(0, 180),
+    learnerMessage: String(input.learnerMessage).slice(0, 1800),
+    history: (input.history ?? []).slice(-10).map((item) => ({ role: item.role, text: String(item.text).slice(0, 900) })),
+  }))
+  .handler(async ({ data }) => {
+    const system = `You are ${data.mentorName}, a kind mentor inside BuildMyLogic. Your specialty is ${data.mentorSpecialty}.
+Use very simple English. Use short sentences. Explain one thing at a time. Be smart, practical, and honest.
+Understand Manglish (Malayalam written in English), such as manasilayilla, enikku ariyilla, entha, evidunnu thudangum. If the learner uses Manglish, reply with gentle Manglish plus clear English when useful.
+Do not shame the learner. Do not give a huge answer. Ask one helpful question when needed.
+Return JSON only: {"message":"your helpful reply"}.`;
+    const history = data.history.map((item) => `${item.role === "mentor" ? "MENTOR" : "LEARNER"}: ${item.text}`).join("\n");
+    return await import("./sarvam.server").then(({ sarvamJson }) =>
+      sarvamJson<{ message: string }>(
+        key(),
+        system,
+        `RECENT CHAT:\n${history || "No previous messages."}\n\nLEARNER'S NEW MESSAGE:\n${data.learnerMessage}`,
+        650,
+      ),
+    );
   });
 
 export const aiReviewSession = createServerFn({ method: "POST" })

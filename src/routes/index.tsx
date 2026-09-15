@@ -13,7 +13,6 @@ import {
   Scale,
   Sparkles,
   Star,
-  Trophy,
   Briefcase,
   X,
   ArrowUp,
@@ -57,7 +56,6 @@ const GOALS = [
   { label: "Build a real product", icon: Hammer, detail: "What kind of product?" },
   { label: "Prepare for a job", icon: Briefcase, detail: "Which role?" },
   { label: "Turn an idea into product", icon: Rocket, detail: "What's the idea?" },
-  { label: "Participate in a hackathon", icon: Trophy, detail: "Which hackathon or theme?" },
 ] as const;
 
 const EXPERIENCE = [

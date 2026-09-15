@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -17,6 +17,14 @@ function run(command, args) {
       if (error) reject(error);
       else resolvePromise(stdout.trim());
     });
+  });
+}
+
+function launch(command, args) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
+    child.once("error", reject);
+    child.once("spawn", () => { child.unref(); resolvePromise(); });
   });
 }
 
@@ -101,10 +109,10 @@ const server = createServer(async (req, res) => {
         if (!path) return json(res, 400, { ok: false, error: "No project path supplied." });
         if (!statSync(path).isDirectory()) return json(res, 400, { ok: false, error: "Project path is not a folder." });
         try {
-          await run("code", ["--reuse-window", path]);
+          await launch("code", ["--reuse-window", path]);
         } catch {
           const uri = `vscode://file${encodeURI(path)}`;
-          await run(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "darwin" ? [uri] : process.platform === "win32" ? ["/c", "start", "", uri] : [uri]);
+          await launch(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "darwin" ? [uri] : process.platform === "win32" ? ["/c", "start", "", uri] : [uri]);
         }
         return json(res, 200, { ok: true });
       } catch (error) {
@@ -137,10 +145,10 @@ const server = createServer(async (req, res) => {
         }
         const uri = `vscode://buildmylogic.logic-analyser/connect?sessionId=${encodeURIComponent(sessionId)}&apiBaseUrl=${encodeURIComponent(apiOrigin)}`;
         try {
-          await run("code", ["--reuse-window", path]);
-          await run("code", ["--open-url", uri]);
+          await launch("code", ["--reuse-window", path]);
+          await launch("code", ["--open-url", uri]);
         } catch {
-          await run(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "darwin" ? [uri] : process.platform === "win32" ? ["/c", "start", "", uri] : [uri]);
+          await launch(process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open", process.platform === "darwin" ? [uri] : process.platform === "win32" ? ["/c", "start", "", uri] : [uri]);
         }
         return json(res, 200, { ok: true });
       } catch (error) {

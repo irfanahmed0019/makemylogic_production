@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as LearnRouteImport } from './routes/learn'
+import { Route as MentorRouteImport } from './routes/mentor'
 import { Route as MissionsRouteImport } from './routes/missions'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as SessionsRouteImport } from './routes/sessions'
@@ -32,6 +33,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const LearnRoute = LearnRouteImport.update({
   id: '/learn',
   path: '/learn',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MentorRoute = MentorRouteImport.update({
+  id: '/mentor',
+  path: '/mentor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MissionsRoute = MissionsRouteImport.update({
@@ -69,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/learn': typeof LearnRoute
+  '/mentor': typeof MentorRoute
   '/missions': typeof MissionsRoute
   '/progress': typeof ProgressRoute
   '/sessions': typeof SessionsRoute
@@ -80,6 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/learn': typeof LearnRoute
+  '/mentor': typeof MentorRoute
   '/missions': typeof MissionsRoute
   '/progress': typeof ProgressRoute
   '/sessions': typeof SessionsRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/learn': typeof LearnRoute
+  '/mentor': typeof MentorRoute
   '/missions': typeof MissionsRoute
   '/progress': typeof ProgressRoute
   '/sessions': typeof SessionsRoute
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/learn'
+    | '/mentor'
     | '/missions'
     | '/progress'
     | '/sessions'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/learn'
+    | '/mentor'
     | '/missions'
     | '/progress'
     | '/sessions'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/learn'
+    | '/mentor'
     | '/missions'
     | '/progress'
     | '/sessions'
@@ -139,6 +151,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LearnRoute: typeof LearnRoute
+  MentorRoute: typeof MentorRoute
   MissionsRoute: typeof MissionsRoute
   ProgressRoute: typeof ProgressRoute
   SessionsRoute: typeof SessionsRoute
@@ -168,6 +181,13 @@ declare module '@tanstack/react-router' {
       path: '/learn'
       fullPath: '/learn'
       preLoaderRoute: typeof LearnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mentor': {
+      id: '/mentor'
+      path: '/mentor'
+      fullPath: '/mentor'
+      preLoaderRoute: typeof MentorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/missions': {
@@ -219,6 +239,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LearnRoute: LearnRoute,
+  MentorRoute: MentorRoute,
   MissionsRoute: MissionsRoute,
   ProgressRoute: ProgressRoute,
   SessionsRoute: SessionsRoute,
