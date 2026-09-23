@@ -23,7 +23,10 @@ const allowedEvents = new Set(["heartbeat", "test_result", "build_result", "comp
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 const HEARTBEAT_TIMEOUT_MS = 45 * 1000;
 const text = (value: unknown, max = 1000) => String(value ?? "").trim().slice(0, max);
-const code = () => `BML-${Array.from(crypto.getRandomValues(new Uint8Array(5)), x => (x % 36).toString(36).toUpperCase()).join("")}`;
+const code = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return `BML-${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+};
 const checkpointText = (value: unknown) => String(value ?? "").replace(/^\s*(?:•|-|\d+[.)])\s*/, "").trim().slice(0, 1000);
 
 type SupabaseSessionRow = { session_data?: unknown };
