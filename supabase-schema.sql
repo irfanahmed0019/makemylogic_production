@@ -88,11 +88,30 @@ ALTER TABLE public.learning_schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.session_events ENABLE ROW LEVEL SECURITY;
 
--- Development policy: allow full access for authenticated and anon users with matching user_id
-CREATE POLICY "Allow public access for dev" ON public.learner_memory FOR ALL USING (true);
-CREATE POLICY "Allow public access for dev" ON public.profiles FOR ALL USING (true);
-CREATE POLICY "Allow public access for dev" ON public.skill_evidence FOR ALL USING (true);
-CREATE POLICY "Allow public access for dev" ON public.learning_schedules FOR ALL USING (true);
-CREATE POLICY "Allow public access for dev" ON public.sessions FOR ALL USING (true);
-CREATE POLICY "Allow public access for dev" ON public.session_events FOR ALL USING (true);
+-- Remove the old development-wide policies if this file was applied before.
+DROP POLICY IF EXISTS "Allow public access for dev" ON public.learner_memory;
+DROP POLICY IF EXISTS "Allow public access for dev" ON public.profiles;
+DROP POLICY IF EXISTS "Allow public access for dev" ON public.skill_evidence;
+DROP POLICY IF EXISTS "Allow public access for dev" ON public.learning_schedules;
+DROP POLICY IF EXISTS "Allow public access for dev" ON public.sessions;
+DROP POLICY IF EXISTS "Allow public access for dev" ON public.session_events;
 
+-- A signed-in learner can access only rows carrying their own Supabase user ID.
+DROP POLICY IF EXISTS "learner owns memory" ON public.learner_memory;
+CREATE POLICY "learner owns memory" ON public.learner_memory FOR ALL TO authenticated
+  USING (user_id = auth.uid()::text) WITH CHECK (user_id = auth.uid()::text);
+DROP POLICY IF EXISTS "learner owns profile" ON public.profiles;
+CREATE POLICY "learner owns profile" ON public.profiles FOR ALL TO authenticated
+  USING (id = auth.uid()::text) WITH CHECK (id = auth.uid()::text);
+DROP POLICY IF EXISTS "learner owns skill evidence" ON public.skill_evidence;
+CREATE POLICY "learner owns skill evidence" ON public.skill_evidence FOR ALL TO authenticated
+  USING (user_id = auth.uid()::text) WITH CHECK (user_id = auth.uid()::text);
+DROP POLICY IF EXISTS "learner owns schedule" ON public.learning_schedules;
+CREATE POLICY "learner owns schedule" ON public.learning_schedules FOR ALL TO authenticated
+  USING (user_id = auth.uid()::text) WITH CHECK (user_id = auth.uid()::text);
+DROP POLICY IF EXISTS "learner owns sessions" ON public.sessions;
+CREATE POLICY "learner owns sessions" ON public.sessions FOR ALL TO authenticated
+  USING (user_id = auth.uid()::text) WITH CHECK (user_id = auth.uid()::text);
+DROP POLICY IF EXISTS "learner owns session events" ON public.session_events;
+CREATE POLICY "learner owns session events" ON public.session_events FOR ALL TO authenticated
+  USING (user_id = auth.uid()::text) WITH CHECK (user_id = auth.uid()::text);
