@@ -1,0 +1,24 @@
+# Dependencies and build output
+node_modules/
+dist/
+.output/
+.vercel/
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs, caches, and editor files
+*.log
+coverage/
+.vite/
+.DS_Store
+.idea/
+.vscode/
+
+.wrangler/
