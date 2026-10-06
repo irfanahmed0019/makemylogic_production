@@ -1,4 +1,20 @@
-import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+
+const authenticatedAi = createMiddleware({ type: "function" })
+  .client(async ({ next }) => {
+    const { getAuthSessionForApi } = await import("./auth");
+    const auth = await getAuthSessionForApi();
+    if (!auth?.idToken) throw new Error("Sign in to use BuildMyLogic AI.");
+    return next({ headers: { Authorization: `Bearer ${auth.idToken}` } });
+  })
+  .server(async ({ next }) => {
+    const { authenticatedUserId } = await import("./request-auth.server");
+    const userId = await authenticatedUserId(getRequest());
+    if (!userId) throw new Error("Sign in to use BuildMyLogic AI.");
+    return next({ context: { authenticatedUserId: userId } });
+  });
+
+import { createServerFn, createMiddleware } from "@tanstack/react-start";
 import type {
   ActivityItem,
   CodeFile,
@@ -110,7 +126,7 @@ type AiTeachMicroLessonResponse = {
   lessonState?: LessonState;
 };
 
-export const aiAnalyzeResume = createServerFn({ method: "POST" })
+export const aiAnalyzeResume = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator((input: { text: string }) => ({
     text: String(input.text).slice(0, 12000),
   }))
@@ -134,7 +150,7 @@ ${data.text}`,
     );
   });
 
-export const aiFollowUpQuestions = createServerFn({ method: "POST" })
+export const aiFollowUpQuestions = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator((input: { profile: Profile }) => input)
   .handler(async ({ data }) => {
     return await import("./sarvam.server").then(({ sarvamJson }) =>
@@ -151,7 +167,7 @@ ${profileBrief(data.profile)}`,
     );
   });
 
-export const aiSuggestProjects = createServerFn({ method: "POST" })
+export const aiSuggestProjects = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator((input: { profile: Profile }) => input)
   .handler(async ({ data }) => {
     const stack = preferredStack(data.profile);
@@ -208,7 +224,7 @@ const PLAN_SHAPE = `{
  "progress": {"momentum": 0-100, "weeklyGoal": string, "insights": [string] (3)}
 }`;
 
-export const aiGeneratePlan = createServerFn({ method: "POST" })
+export const aiGeneratePlan = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator((input: { profile: Profile }) => input)
   .handler(async ({ data }) => {
     const stack = preferredStack(data.profile);
@@ -256,7 +272,7 @@ ${profileBrief(data.profile)}`,
     return plan;
   });
 
-export const aiRetunePlan = createServerFn({ method: "POST" })
+export const aiRetunePlan = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator(
     (input: { profile: Profile; plan: Plan; activity: ActivityItem[] }) =>
       input,
@@ -287,7 +303,7 @@ ${recent || "no activity yet"}`,
     );
   });
 
-export const aiGenerateCode = createServerFn({ method: "POST" })
+export const aiGenerateCode = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator((input: { mission: Mission; projectTitle: string }) => input)
   .handler(async ({ data }) => {
     return await import("./sarvam.server").then(({ sarvamJson }) =>
@@ -304,7 +320,7 @@ MISSION: ${JSON.stringify(data.mission).slice(0, 3000)}`,
     );
   });
 
-export const aiTeachMicroLesson = createServerFn({ method: "POST" })
+export const aiTeachMicroLesson = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator(
     (input: {
       topic: string;
@@ -579,7 +595,7 @@ Provide the next single intervention conforming to the output contract.`;
     }
   });
 
-export const aiMentorChat = createServerFn({ method: "POST" })
+export const aiMentorChat = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator(
     (input: {
       mentorName: string;
@@ -618,7 +634,7 @@ Return JSON only: {"message":"your helpful reply"}.`;
     );
   });
 
-export const aiReviewSession = createServerFn({ method: "POST" })
+export const aiReviewSession = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator(
     (input: { missionTitle: string; note: string; minutes: number }) => input,
   )
@@ -634,7 +650,7 @@ Return JSON: {"feedback": string (2 sentences, honest), "nextStep": string (one 
     );
   });
 
-export const aiReviewProjectZip = createServerFn({ method: "POST" })
+export const aiReviewProjectZip = createServerFn({ method: "POST" }).middleware([authenticatedAi])
   .validator(
     (input: {
       fileName: string;
