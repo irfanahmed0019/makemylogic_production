@@ -199,7 +199,10 @@ class Sidebar implements vscode.WebviewViewProvider {
     return [{ index: checkpoint.index, passed: result.passed, output: result.output }];
   }
 
-  private runCommand(command: string, cwd: string, timeoutMs: number) {
+  private async runCommand(command: string, cwd: string, timeoutMs: number) {
+    if (!vscode.workspace.isTrusted) return { code: 1, passed: false, output: 'Trust this workspace before running local commands.' };
+    const approval = await vscode.window.showWarningMessage(`Run this command locally in ${cwd}?\n${command}`, { modal: true }, 'Run command');
+    if (approval !== 'Run command') return { code: 1, passed: false, output: 'Command cancelled by the learner.' };
     const outputChannel = vscode.window.createOutputChannel('BuildMyLogic Tests'); outputChannel.show(true); outputChannel.appendLine(`$ ${command}`);
     return new Promise<{ code: number; passed: boolean; output: string }>((resolve) => {
       if (!command.trim()) return resolve({ code: 1, passed: false, output: 'No safe local run command was available for this project.' });
@@ -213,8 +216,11 @@ class Sidebar implements vscode.WebviewViewProvider {
 
   private async submitProject() {
     if (!this.connection) return;
+    if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before submitting files.');
+    const consent = await vscode.window.showWarningMessage('Submit project source files to BuildMyLogic and its AI review service? Do not include private data or secrets.', { modal: true }, 'Submit source');
+    if (consent !== 'Submit source') return;
     const root = vscode.workspace.workspaceFolders?.[0]?.uri; if (!root) throw new Error('Open the project folder before submitting it.');
-    const excluded = '{**/node_modules/**,**/.git/**,**/venv/**,**/.venv/**,**/__pycache__/**,**/dist/**,**/build/**}';
+    const excluded = '{**/node_modules/**,**/.git/**,**/venv/**,**/.venv/**,**/__pycache__/**,**/dist/**,**/build/**,**/.env,**/.env.*,**/*.pem,**/*.key,**/.npmrc,**/.pypirc,**/.ssh/**,**/credentials*,**/secrets*}';
     const files: Array<{ path: string; content: string }> = []; let bytes = 0;
     for (const uri of await vscode.workspace.findFiles('**/*', excluded, 250)) {
       if (files.length >= 250 || bytes >= 8 * 1024 * 1024) break;
