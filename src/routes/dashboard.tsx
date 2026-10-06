@@ -1,6 +1,6 @@
 /**
  * BuildMyLogic — Learner Dashboard
- * 
+ *
  * Central hub for the learner's journey: active missions, skill radar,
  * daily build rhythm scheduler (Google Calendar sync), and real-time telemetry.
  */
@@ -21,7 +21,14 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { applyBuildSessionEvidence, applySarvamDashboardPlan, getLoopState, logActivity, setMissionProgress, useLoop } from "@/lib/loop-store";
+import {
+  applyBuildSessionEvidence,
+  applySarvamDashboardPlan,
+  getLoopState,
+  logActivity,
+  setMissionProgress,
+  useLoop,
+} from "@/lib/loop-store";
 import type { BuildSessionState } from "@/lib/loop-types";
 import { aiRetunePlan } from "@/lib/sarvam.functions";
 import { ScheduleModal, ScheduleSyncCard } from "@/components/ScheduleModal";
@@ -36,7 +43,11 @@ export const Route = createFileRoute("/dashboard")({
  */
 function greeting() {
   const hour = new Date().getHours();
-  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  return hour < 12
+    ? "Good morning"
+    : hour < 17
+      ? "Good afternoon"
+      : "Good evening";
 }
 
 function Dashboard() {
@@ -45,10 +56,19 @@ function Dashboard() {
   const plan = state.plan;
   const name = state.profile?.name?.trim() || "Builder";
   const missions = plan?.missions ?? [];
-  const current = missions.find((m) => state.missionProgress[m.id]?.status === "active") ?? missions[0];
-  const currentIndex = Math.max(0, missions.findIndex((m) => m.id === current?.id));
-  const doneCount = missions.filter((m) => state.missionProgress[m.id]?.status === "done").length;
-  const currentSteps = current ? (state.missionProgress[current.id]?.completedSteps?.length ?? 0) : 0;
+  const current =
+    missions.find((m) => state.missionProgress[m.id]?.status === "active") ??
+    missions[0];
+  const currentIndex = Math.max(
+    0,
+    missions.findIndex((m) => m.id === current?.id),
+  );
+  const doneCount = missions.filter(
+    (m) => state.missionProgress[m.id]?.status === "done",
+  ).length;
+  const currentSteps = current
+    ? (state.missionProgress[current.id]?.completedSteps?.length ?? 0)
+    : 0;
   const currentTotalSteps = current?.steps.length ?? 1;
   const goal = state.profile?.goal || "Build real-world skills";
 
@@ -59,43 +79,91 @@ function Dashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    let since: number | null = null;
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+    // Long-poll loop: hold the request until the session's `rev` changes (up
+    // to 8s), so a finished/struggling build in VS Code retunes the dashboard
+    // instantly instead of on a 5 second timer.
     const syncBuildSession = async () => {
-      const raw = window.localStorage.getItem("bml-vscode-session");
-      if (!raw) return;
-      try {
-        const saved = JSON.parse(raw) as { sessionId?: string };
-        if (!saved.sessionId) return;
-        const response = await fetch(`/api/sessions/${encodeURIComponent(saved.sessionId)}/state`, { cache: "no-store" });
-        if (!response.ok) return;
-        const result = await response.json() as { ok?: boolean; state?: BuildSessionState };
-        const remote = result.state;
-        if (cancelled || !result.ok || !remote) return;
-        const shouldRetune = remote.status === "completed" || remote.status === "failed" || Boolean(remote.potential_struggle);
-        if (!shouldRetune) return;
-        applyBuildSessionEvidence(remote);
-        const key = `${remote.session_id}:${remote.status}:${remote.attempts}:${remote.test_score?.passed ?? 0}:${remote.potential_struggle ? "struggle" : "normal"}`;
-        if (dashboardRetuneKey.current === key) return;
-        dashboardRetuneKey.current = key;
-        const currentState = getLoopState();
-        if (!currentState.profile || !currentState.plan) return;
-        void aiRetunePlan({ data: { profile: currentState.profile, plan: currentState.plan, activity: currentState.activity } }).then((suggested) => {
-          applySarvamDashboardPlan(suggested);
-          logActivity({ kind: "ai", text: remote.status === "completed" ? "Vibe updated the dashboard after you proved the challenge." : "Vibe updated the dashboard with a focused recovery path." });
-        }).catch(() => {
-          // The deterministic dashboard adjustment remains available without Sarvam.
-        });
-      } catch {
-        // The Sessions page displays the actionable expired-session message.
+      while (!cancelled) {
+        try {
+          const raw = window.localStorage.getItem("bml-vscode-session");
+          const saved = raw
+            ? (JSON.parse(raw) as { sessionId?: string })
+            : null;
+          if (!saved?.sessionId) {
+            await sleep(5000);
+            continue;
+          }
+          const params = new URLSearchParams({ wait: "8000" });
+          if (since !== null) params.set("since", String(since));
+          const response = await fetch(
+            `/api/sessions/${encodeURIComponent(saved.sessionId)}/state?${params.toString()}`,
+            { cache: "no-store" },
+          );
+          const result = (await response.json()) as {
+            ok?: boolean;
+            state?: BuildSessionState & { rev?: number };
+          };
+          if (cancelled) return;
+          const remote = result.state;
+          if (!response.ok || !result.ok || !remote) {
+            await sleep(5000);
+            continue;
+          }
+          const rev = typeof remote.rev === "number" ? remote.rev : null;
+          if (rev !== null && rev === since) continue; // waited, no change yet
+          since = rev;
+          const shouldRetune =
+            remote.status === "completed" ||
+            remote.status === "failed" ||
+            Boolean(remote.potential_struggle);
+          if (!shouldRetune) continue;
+          applyBuildSessionEvidence(remote);
+          const key = `${remote.session_id}:${remote.status}:${remote.attempts}:${remote.test_score?.passed ?? 0}:${remote.potential_struggle ? "struggle" : "normal"}`;
+          if (dashboardRetuneKey.current === key) continue;
+          dashboardRetuneKey.current = key;
+          const currentState = getLoopState();
+          if (!currentState.profile || !currentState.plan) continue;
+          void aiRetunePlan({
+            data: {
+              profile: currentState.profile,
+              plan: currentState.plan,
+              activity: currentState.activity,
+            },
+          })
+            .then((suggested) => {
+              applySarvamDashboardPlan(suggested);
+              logActivity({
+                kind: "ai",
+                text:
+                  remote.status === "completed"
+                    ? "Vibe updated the dashboard after you proved the challenge."
+                    : "Vibe updated the dashboard with a focused recovery path.",
+              });
+            })
+            .catch(() => {
+              // The deterministic dashboard adjustment remains available without Sarvam.
+            });
+        } catch {
+          if (cancelled) return;
+          // The Sessions page displays the actionable expired-session message.
+          await sleep(5000);
+        }
       }
     };
     void syncBuildSession();
-    const timer = window.setInterval(() => void syncBuildSession(), 5000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Check if learner has booked a Google Calendar reminder recently
   useEffect(() => {
-    const calendarPromptDismissed = window.sessionStorage.getItem("bml-calendar-dismissed");
+    const calendarPromptDismissed = window.sessionStorage.getItem(
+      "bml-calendar-dismissed",
+    );
     if (!calendarPromptDismissed && plan) {
       // Show subtle reminder banner to set their learning rhythm
       setShowPromptBanner(true);
@@ -126,11 +194,17 @@ function Dashboard() {
       {!plan || !current ? (
         <section className="card-surface p-12 text-center">
           <Rocket className="mx-auto h-9 w-9 text-primary" />
-          <h2 className="display mt-4 text-2xl font-bold">Your build path is waiting.</h2>
+          <h2 className="display mt-4 text-2xl font-bold">
+            Your build path is waiting.
+          </h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Tell BuildMyLogic what you want to achieve and we'll build the path around it.
+            Tell BuildMyLogic what you want to achieve and we'll build the path
+            around it.
           </p>
-          <Link to="/" className="btn-base btn-primary-solid mt-6 inline-flex items-center gap-2">
+          <Link
+            to="/"
+            className="btn-base btn-primary-solid mt-6 inline-flex items-center gap-2"
+          >
             <span>Start onboarding</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
@@ -145,9 +219,13 @@ function Dashboard() {
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-foreground">Set your daily learning time</h4>
+                  <h4 className="text-sm font-bold text-foreground">
+                    Set your daily learning time
+                  </h4>
                   <p className="text-xs text-muted-foreground">
-                    Block {state.profile?.startTime || "19:00"} - {state.profile?.endTime || "20:00"} on Google Calendar so you never miss your build streak.
+                    Block {state.profile?.startTime || "19:00"} -{" "}
+                    {state.profile?.endTime || "20:00"} on Google Calendar so
+                    you never miss your build streak.
                   </p>
                 </div>
               </div>
@@ -172,39 +250,45 @@ function Dashboard() {
           )}
 
           {/* 6-Stage Pedagogical Loop Progress Tracker */}
-          <section className="card-surface overflow-hidden">
+          <section className="card-surface rise overflow-hidden">
             <div className="grid grid-cols-2 md:grid-cols-6">
-              {["Learn", "Build", "Fail", "Understand", "Improve", "Loop"].map((label, i) => (
-                <div
-                  key={label}
-                  className={`border-r border-border px-4 py-4 last:border-r-0 ${
-                    i === 0 ? "bg-primary-soft/60" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold ${
-                        i === 0
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {i + 1}
-                    </span>
-                    <span className="text-xs font-bold">{label}</span>
+              {["Learn", "Build", "Fail", "Understand", "Improve", "Loop"].map(
+                (label, i) => (
+                  <div
+                    key={label}
+                    className={`group relative border-r border-border/70 px-4 py-4 transition-colors last:border-r-0 ${
+                      i === 0
+                        ? "bg-gradient-to-b from-primary-soft/80 to-transparent"
+                        : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                          i === 0
+                            ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30"
+                            : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-accent-foreground"
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="text-xs font-bold">{label}</span>
+                    </div>
+                    <p className="mt-1 pl-9 text-[10px] leading-4 text-muted-foreground">
+                      {
+                        [
+                          "Understand the concept",
+                          "Write code",
+                          "Face challenges",
+                          "Get feedback",
+                          "Fix & improve",
+                          "Repeat & level up",
+                        ][i]
+                      }
+                    </p>
                   </div>
-                  <p className="mt-1 pl-9 text-[10px] text-muted-foreground">
-                    {[
-                      "Understand the concept",
-                      "Write code",
-                      "Face challenges",
-                      "Get feedback",
-                      "Fix & improve",
-                      "Repeat & level up",
-                    ][i]}
-                  </p>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           </section>
 
@@ -213,35 +297,43 @@ function Dashboard() {
             {/* Left Column — Current Mission & Skills */}
             <div className="space-y-5 lg:col-span-8">
               {/* Current Active Mission Card */}
-              <section className="card-surface p-6">
+              <section className="card-surface rise p-6">
                 <div className="flex items-center justify-between">
-                  <p className="text-[12px] font-bold uppercase tracking-wide text-muted-foreground">
-                    Current Mission
-                  </p>
+                  <p className="eyebrow">Current Mission</p>
                   <span className="pill bg-primary-soft text-accent-foreground flex items-center gap-1">
                     <Sparkles className="h-3 w-3" /> Recommended for you
                   </span>
                 </div>
 
                 <div className="mt-5 flex items-start gap-5">
-                  <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center rounded-2xl bg-muted">
-                    <Terminal className="h-8 w-8 text-foreground" />
+                  <div className="flex h-[74px] w-[74px] shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/20">
+                    <Terminal className="h-8 w-8 text-white" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h2 className="display text-2xl font-bold">{current.title}</h2>
+                    <h2 className="display text-2xl font-bold">
+                      {current.title}
+                    </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {current.stack} <span className="mx-1">•</span> Difficulty {current.difficulty}{" "}
-                      <span className="mx-1">•</span> ~{current.minutes} mins
+                      {current.stack} <span className="mx-1">•</span> Difficulty{" "}
+                      {current.difficulty} <span className="mx-1">•</span> ~
+                      {current.minutes} mins
                     </p>
-                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{current.description}</p>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      {current.description}
+                    </p>
                   </div>
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-[11px] font-semibold text-muted-foreground">Skills you'll practice</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground">
+                    Skills you'll practice
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {current.skills.map((skill) => (
-                      <span key={skill} className="rounded-lg bg-muted px-2.5 py-1.5 text-xs font-medium">
+                      <span
+                        key={skill}
+                        className="rounded-lg border border-border/70 bg-muted/60 px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-primary/40 hover:bg-primary-soft"
+                      >
                         {skill}
                       </span>
                     ))}
@@ -259,13 +351,18 @@ function Dashboard() {
                   >
                     <BookOpen className="h-4 w-4" />
                     <span>Need to learn something?</span>
-                    <span className="font-bold underline">Learn for this mission →</span>
+                    <span className="font-bold underline">
+                      Learn for this mission →
+                    </span>
                   </button>
                   <button
                     type="button"
                     className="btn-base btn-ink"
                     onClick={() => {
-                      window.localStorage.setItem("loop-auto-start-session", "1");
+                      window.localStorage.setItem(
+                        "loop-auto-start-session",
+                        "1",
+                      );
                       void navigate({ to: "/sessions" });
                     }}
                   >
@@ -281,18 +378,31 @@ function Dashboard() {
                 <section className="card-surface p-5">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-sm font-bold">Your Skills</h3>
-                    <Link to="/skills" className="text-xs font-semibold text-accent-foreground hover:underline">
+                    <Link
+                      to="/skills"
+                      className="text-xs font-semibold text-accent-foreground hover:underline"
+                    >
                       View all →
                     </Link>
                   </div>
                   <div className="space-y-3.5">
                     {(plan.skills ?? []).slice(0, 5).map((s) => (
-                      <div key={s.name} className="flex items-center gap-3 text-xs">
-                        <span className="w-28 truncate font-medium">{s.name}</span>
+                      <div
+                        key={s.name}
+                        className="flex items-center gap-3 text-xs"
+                      >
+                        <span className="w-28 truncate font-medium">
+                          {s.name}
+                        </span>
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                          <div className="h-1.5 rounded-full bg-primary" style={{ width: `${s.level}%` }} />
+                          <div
+                            className="h-1.5 rounded-full bg-gradient-to-r from-primary to-accent transition-[width] duration-700 ease-out"
+                            style={{ width: `${s.level}%` }}
+                          />
                         </div>
-                        <span className="w-8 text-right text-[11px] font-semibold">{s.level}%</span>
+                        <span className="w-8 text-right text-[11px] font-semibold">
+                          {s.level}%
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -305,12 +415,16 @@ function Dashboard() {
                   </div>
                   {state.activity.length === 0 ? (
                     <p className="text-xs leading-5 text-muted-foreground">
-                      Finish a session and your real build history will appear here.
+                      Finish a session and your real build history will appear
+                      here.
                     </p>
                   ) : (
                     <div className="space-y-3">
                       {state.activity.slice(0, 4).map((a) => (
-                        <div key={a.at} className="border-l-2 border-primary pl-3">
+                        <div
+                          key={a.at}
+                          className="border-l-2 border-primary pl-3"
+                        >
                           <p className="text-xs font-medium">{a.text}</p>
                           <p className="mt-0.5 text-[10px] text-muted-foreground">
                             {new Date(a.at).toLocaleString()}
@@ -326,7 +440,9 @@ function Dashboard() {
             {/* Right Column — Calendar Rhythm & Insights */}
             <aside className="space-y-5 lg:col-span-4">
               {/* Daily Build Rhythm Quick Sync Card */}
-              <ScheduleSyncCard onOpenModal={() => setScheduleModalOpen(true)} />
+              <ScheduleSyncCard
+                onOpenModal={() => setScheduleModalOpen(true)}
+              />
 
               {/* Learning Flow Progress */}
               <section className="card-surface p-5">
@@ -336,7 +452,9 @@ function Dashboard() {
                     {current
                       ? `${Math.min(
                           4,
-                          2 + (currentSteps > 0 ? 1 : 0) + (doneCount > 0 ? 1 : 0)
+                          2 +
+                            (currentSteps > 0 ? 1 : 0) +
+                            (doneCount > 0 ? 1 : 0),
                         )} / 4`
                       : "0 / 4"}
                   </span>
@@ -345,8 +463,16 @@ function Dashboard() {
                   {[
                     ["Onboarding", "Completed"],
                     ["Personalized Path", plan ? "Ready" : "Waiting"],
-                    ["Build & Learn", current ? `${currentSteps}/${currentTotalSteps} mission steps` : "Waiting"],
-                    ["Prove & Grow", `${doneCount}/${missions.length} missions completed`],
+                    [
+                      "Build & Learn",
+                      current
+                        ? `${currentSteps}/${currentTotalSteps} mission steps`
+                        : "Waiting",
+                    ],
+                    [
+                      "Prove & Grow",
+                      `${doneCount}/${missions.length} missions completed`,
+                    ],
                   ].map(([t, s], i) => (
                     <div key={t} className="flex items-start gap-3">
                       <span
@@ -354,8 +480,8 @@ function Dashboard() {
                           i < 2
                             ? "border-ink bg-ink text-white"
                             : i === 2
-                            ? "border-primary text-primary"
-                            : "border-border"
+                              ? "border-primary text-primary"
+                              : "border-border"
                         }`}
                       >
                         {i < 2 ? (
@@ -378,10 +504,13 @@ function Dashboard() {
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
                   <h3 className="text-sm font-bold">BuildMyLogic Insight</h3>
-                  <span className="pill bg-primary-soft text-accent-foreground text-[10px]">AI</span>
+                  <span className="pill bg-primary-soft text-accent-foreground text-[10px]">
+                    AI
+                  </span>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  {plan.progress.insights?.[0] ?? `Your path is optimized for ${goal}. Each mission produces verifiable proof that you can architect, test, and ship.`}
+                  {plan.progress.insights?.[0] ??
+                    `Your path is optimized for ${goal}. Each mission produces verifiable proof that you can architect, test, and ship.`}
                 </p>
                 <div className="mt-3 rounded-xl bg-primary-soft px-3 py-2.5 text-xs font-bold">
                   Next adaptive task: {current?.title ?? "Start a mission"}
@@ -392,17 +521,25 @@ function Dashboard() {
               <section className="card-surface p-5">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-bold">Next Missions</h3>
-                  <Link to="/missions" className="text-xs font-semibold text-accent-foreground hover:underline">
+                  <Link
+                    to="/missions"
+                    className="text-xs font-semibold text-accent-foreground hover:underline"
+                  >
                     View all →
                   </Link>
                 </div>
                 {missions.slice(currentIndex + 1, currentIndex + 4).map((m) => (
-                  <div key={m.id} className="flex items-center gap-3 border-t border-border py-3">
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-3 border-t border-border py-3"
+                  >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
                       <Lock className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold">{m.title}</p>
+                      <p className="truncate text-xs font-semibold">
+                        {m.title}
+                      </p>
                       <p className="text-[10px] text-muted-foreground">
                         {m.stack} · Difficulty {m.difficulty}
                       </p>

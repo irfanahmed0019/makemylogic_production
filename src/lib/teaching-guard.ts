@@ -81,15 +81,27 @@ const CASUAL_PATTERNS = [
 
 export function signalsBeginner(text: string): boolean {
   const value = text.trim();
-  return value.length > 0 && BEGINNER_PATTERNS.some((pattern) => pattern.test(value));
+  return (
+    value.length > 0 && BEGINNER_PATTERNS.some((pattern) => pattern.test(value))
+  );
 }
 
-export function isCContext(topic: string, missionTitle: string, missionDescription: string): boolean {
-  const haystack = `${topic} ${missionTitle} ${missionDescription}`.toLowerCase();
-  return /(^|[^a-z])(c|c language|c programming|cmake)([^a-z]|$)/i.test(haystack);
+export function isCContext(
+  topic: string,
+  missionTitle: string,
+  missionDescription: string,
+): boolean {
+  const haystack =
+    `${topic} ${missionTitle} ${missionDescription}`.toLowerCase();
+  return /(^|[^a-z])(c|c language|c programming|cmake)([^a-z]|$)/i.test(
+    haystack,
+  );
 }
 
-export function detectIntent(message: string, currentStep?: string): LearnerIntent {
+export function detectIntent(
+  message: string,
+  currentStep?: string,
+): LearnerIntent {
   const text = message.toLowerCase().trim();
   if (!text) return "QUESTION";
 
@@ -117,7 +129,10 @@ export function detectIntent(message: string, currentStep?: string): LearnerInte
   return "QUESTION";
 }
 
-export function isDuplicateResponse(response: string, previousMessages: string[]): boolean {
+export function isDuplicateResponse(
+  response: string,
+  previousMessages: string[],
+): boolean {
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -133,7 +148,8 @@ export function isDuplicateResponse(response: string, previousMessages: string[]
     if (!normPrev || normPrev.length < 15) return false;
     if (candidate === normPrev) return true;
     if (candidate.length > 35 && normPrev.length > 35) {
-      if (candidate.includes(normPrev) || normPrev.includes(candidate)) return true;
+      if (candidate.includes(normPrev) || normPrev.includes(candidate))
+        return true;
     }
     return false;
   });
@@ -168,7 +184,11 @@ export function stepResult(state: LessonState): TeachResult {
   const step = C_CURRICULUM_MAP[conceptId] || C_CURRICULUM_MAP.hello_world;
 
   // If in drill mode: Question 1/3, 2/3, 3/3
-  if (drillIndex !== undefined && drillIndex >= 0 && drillIndex < step.drills.length) {
+  if (
+    drillIndex !== undefined &&
+    drillIndex >= 0 &&
+    drillIndex < step.drills.length
+  ) {
     const drill = step.drills[drillIndex];
     return {
       message: `**Question ${drillIndex + 1}/3**: ${drill.question}`,
@@ -202,7 +222,11 @@ export function handleScaffold(state: LessonState): TeachResult {
   const { conceptId, drillIndex } = parseDrillState(state);
   const step = C_CURRICULUM_MAP[conceptId] || C_CURRICULUM_MAP.hello_world;
 
-  if (drillIndex !== undefined && drillIndex >= 0 && drillIndex < step.drills.length) {
+  if (
+    drillIndex !== undefined &&
+    drillIndex >= 0 &&
+    drillIndex < step.drills.length
+  ) {
     const drill = step.drills[drillIndex];
     return {
       message: `That's okay! Take your time.\n\n${drill.question}`,
@@ -257,7 +281,7 @@ export function handleRepeatCorrection(state: LessonState): TeachResult {
  */
 export function advanceCBeginner(
   lessonState: LessonState | undefined,
-  studentAnswer: string
+  studentAnswer: string,
 ): TeachResult | null {
   const state: LessonState = lessonState ?? "hello_world";
   const answer = studentAnswer.trim();
@@ -268,7 +292,8 @@ export function advanceCBeginner(
   // 1. Pedagogy request: user asked to give question first with hint, teach if don't know, then 3 drill questions with no hints
   if (curriculumIntent === "PEDAGOGY_REQUEST") {
     const { conceptId } = parseDrillState(state);
-    const activeConcept = conceptId in C_CURRICULUM_MAP ? conceptId : "basic_math";
+    const activeConcept =
+      conceptId in C_CURRICULUM_MAP ? conceptId : "basic_math";
     const step = C_CURRICULUM_MAP[activeConcept];
     return {
       message: `You got it! Exactly how we'll do it from now on:\n1. Question first with only a tiny operator hint.\n2. If you don't know, I'll teach you.\n3. Then 3 practice questions with **no hints**!\n\n**${step.title}**\n${step.initialQuestion}`,
@@ -298,7 +323,8 @@ export function advanceCBeginner(
 
   // 5. Evaluate answer deterministically
   const { conceptId, drillIndex } = parseDrillState(state);
-  const activeConcept: CConceptId = conceptId in C_CURRICULUM_MAP ? conceptId : "basic_math";
+  const activeConcept: CConceptId =
+    conceptId in C_CURRICULUM_MAP ? conceptId : "basic_math";
   const step = C_CURRICULUM_MAP[activeConcept];
 
   const evalRes = evaluateCurriculumAnswer(activeConcept, answer, drillIndex);
@@ -377,18 +403,27 @@ export function normalizeTeachResult(
   raw: unknown,
   forceBeginnerReset: boolean,
   cContext: boolean,
-  lessonState?: LessonState
+  lessonState?: LessonState,
 ): TeachResult {
-  const candidate = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const candidateState = cleanText(candidate.lessonState, 80) || lessonState || "hello_world";
+  const candidate = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const candidateState =
+    cleanText(candidate.lessonState, 80) || lessonState || "hello_world";
 
   const result: TeachResult = {
-    message: cleanText(candidate.message, 1800) || "Let's take one small step at a time.",
+    message:
+      cleanText(candidate.message, 1800) ||
+      "Let's take one small step at a time.",
     question: cleanText(candidate.question, 500),
     memory: cleanText(candidate.memory, 900),
     understood: candidate.understood === true,
-    nextConcept: cleanText(candidate.nextConcept, 160) || cleanText(candidate.concept, 160),
-    readyForProject: candidate.readyForProject === true || candidate.return_to_build === true,
+    nextConcept:
+      cleanText(candidate.nextConcept, 160) ||
+      cleanText(candidate.concept, 160),
+    readyForProject:
+      candidate.readyForProject === true || candidate.return_to_build === true,
     lessonState: candidateState,
     return_to_build: candidate.return_to_build === true,
   };
@@ -400,4 +435,3 @@ export function normalizeTeachResult(
   }
   return result;
 }
-

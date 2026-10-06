@@ -15,7 +15,11 @@ function isRetryableStatus(status: number) {
   return status === 408 || status === 409 || status === 429 || status >= 500;
 }
 
-export async function sarvamChat(apiKey: string, messages: Msg[], maxTokens = 800): Promise<string> {
+export async function sarvamChat(
+  apiKey: string,
+  messages: Msg[],
+  maxTokens = 800,
+): Promise<string> {
   const attempts = 3;
   let lastError: unknown;
 
@@ -50,14 +54,20 @@ export async function sarvamChat(apiKey: string, messages: Msg[], maxTokens = 80
           await sleep(500 * 2 ** attempt);
           continue;
         }
-        throw new Error(res.status === 403 ? safeMessage : `${safeMessage}. Please try again.`);
+        throw new Error(
+          res.status === 403
+            ? safeMessage
+            : `${safeMessage}. Please try again.`,
+        );
       }
 
       let json: SarvamResponse;
       try {
         json = JSON.parse(rawBody) as SarvamResponse;
       } catch {
-        throw new Error("Sarvam AI returned an invalid response. Please try again.");
+        throw new Error(
+          "Sarvam AI returned an invalid response. Please try again.",
+        );
       }
 
       const choice = json.choices?.[0];
@@ -82,7 +92,8 @@ export async function sarvamChat(apiKey: string, messages: Msg[], maxTokens = 80
         }
         throw new Error("Vibe took too long to respond. Please try again.");
       }
-      if (error instanceof Error && error.message.startsWith("Sarvam AI error")) throw error;
+      if (error instanceof Error && error.message.startsWith("Sarvam AI error"))
+        throw error;
       if (attempt < attempts - 1) {
         await sleep(400 * 2 ** attempt);
         continue;
@@ -93,7 +104,9 @@ export async function sarvamChat(apiKey: string, messages: Msg[], maxTokens = 80
   }
 
   if (lastError instanceof Error && lastError.message) {
-    throw new Error(`Vibe could not reach Sarvam right now. ${lastError.message}`);
+    throw new Error(
+      `Vibe could not reach Sarvam right now. ${lastError.message}`,
+    );
   }
   throw new Error("Vibe could not respond right now. Please try again.");
 }
@@ -120,11 +133,19 @@ export function parseJsonBlock<T>(text: string): T {
   throw new Error("Vibe returned an unreadable answer. Please try again.");
 }
 
-export async function sarvamJson<T>(apiKey: string, system: string, user: string, maxTokens = 1200): Promise<T> {
+export async function sarvamJson<T>(
+  apiKey: string,
+  system: string,
+  user: string,
+  maxTokens = 1200,
+): Promise<T> {
   const raw = await sarvamChat(
     apiKey,
     [
-      { role: "system", content: `${system}\n\nReturn a JSON object only. No markdown fences. No prose outside JSON.` },
+      {
+        role: "system",
+        content: `${system}\n\nReturn a JSON object only. No markdown fences. No prose outside JSON.`,
+      },
       { role: "user", content: user },
     ],
     maxTokens,

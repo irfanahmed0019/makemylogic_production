@@ -27,7 +27,7 @@ export function buildCompressedMemory(
   learnerName: string,
   mission: Mission,
   state: LearningState,
-  latestAnswer?: string
+  latestAnswer?: string,
 ): CompressedMemorySummary {
   const known = [...(state.demonstratedSkills || [])];
   if (state.understood && state.concept && !known.includes(state.concept)) {
@@ -42,25 +42,48 @@ export function buildCompressedMemory(
     currentObjective: `Master ${state.concept} for ${mission.title}`,
     knownConcepts: known,
     weakConcepts: weak,
-    recentActivity: latestAnswer ? [`Latest response: "${latestAnswer.slice(0, 80)}"`] : [],
-    teachingApproach: state.hintsUsed > 1 ? "Scaffold with tiny examples and simpler questions" : "Socratic, 1 concept at a time",
+    recentActivity: latestAnswer
+      ? [`Latest response: "${latestAnswer.slice(0, 80)}"`]
+      : [],
+    teachingApproach:
+      state.hintsUsed > 1
+        ? "Scaffold with tiny examples and simpler questions"
+        : "Socratic, 1 concept at a time",
     currentTeachingState: `Concept: ${state.concept}, Step: ${state.stepId}, Attempts: ${state.attempts}, Status: ${state.status}`,
-    nextGoal: state.understood ? `Advance beyond ${state.concept}` : `Clarify and verify ${state.concept}`,
+    nextGoal: state.understood
+      ? `Advance beyond ${state.concept}`
+      : `Clarify and verify ${state.concept}`,
   };
 }
 
-export function buildAiContext(input: ContextInput, systemPrompt: string): BuiltContext {
+export function buildAiContext(
+  input: ContextInput,
+  systemPrompt: string,
+): BuiltContext {
   const name = input.profile?.name?.trim() || "Learner";
-  const memory = buildCompressedMemory(name, input.mission, input.learningState, input.latestAnswer);
+  const memory = buildCompressedMemory(
+    name,
+    input.mission,
+    input.learningState,
+    input.latestAnswer,
+  );
 
-  const skillsList = Object.entries(input.skillMemory || {})
-    .map(([skill, item]) => `${skill}: ${item.level}% (${item.evidence.length} evidence pts)`)
-    .join(", ") || (input.learningState.demonstratedSkills.length > 0 ? input.learningState.demonstratedSkills.join(", ") : "None demonstrated yet");
+  const skillsList =
+    Object.entries(input.skillMemory || {})
+      .map(
+        ([skill, item]) =>
+          `${skill}: ${item.level}% (${item.evidence.length} evidence pts)`,
+      )
+      .join(", ") ||
+    (input.learningState.demonstratedSkills.length > 0
+      ? input.learningState.demonstratedSkills.join(", ")
+      : "None demonstrated yet");
 
-  const recentChatStr = (input.recentHistory || [])
-    .slice(-6)
-    .map((m) => `${m.role.toUpperCase()}: ${m.text}`)
-    .join("\n") || "No prior messages";
+  const recentChatStr =
+    (input.recentHistory || [])
+      .slice(-6)
+      .map((m) => `${m.role.toUpperCase()}: ${m.text}`)
+      .join("\n") || "No prior messages";
 
   const userPrompt = `AUTHORITATIVE LEARNER STATE:
 Learner: ${name}

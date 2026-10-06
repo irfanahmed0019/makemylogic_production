@@ -1,5 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { ActivityItem, CodeFile, Mission, Plan, Profile, TechItem } from "./loop-types";
+import type {
+  ActivityItem,
+  CodeFile,
+  Mission,
+  Plan,
+  Profile,
+  TechItem,
+} from "./loop-types";
 import {
   advanceCBeginner,
   detectIntent,
@@ -17,10 +24,14 @@ function key(): string {
   // entry (src/server.ts) bridges env.SARVAM_API_KEY into process.env.
   const value = process.env["SARVAM_API_KEY"]?.trim();
   if (!value) {
-    throw new Error("Sarvam AI is not configured. Add a valid SARVAM_API_KEY to the server environment and redeploy.");
+    throw new Error(
+      "Sarvam AI is not configured. Add a valid SARVAM_API_KEY to the server environment and redeploy.",
+    );
   }
   if (/^(your_|sk_your|sk_placeholder|replace_with_)/i.test(value)) {
-    throw new Error("Sarvam AI is using a placeholder API key. Replace SARVAM_API_KEY with a valid key from the Sarvam dashboard and redeploy.");
+    throw new Error(
+      "Sarvam AI is using a placeholder API key. Replace SARVAM_API_KEY with a valid key from the Sarvam dashboard and redeploy.",
+    );
   }
   return value;
 }
@@ -44,25 +55,41 @@ function profileBrief(profile: Profile): string {
 }
 
 function preferredStack(profile: Profile): string {
-  return profile.technologies.map((technology) => technology.name.trim()).filter(Boolean).join(", ") || "the learner's stated project requirements";
+  return (
+    profile.technologies
+      .map((technology) => technology.name.trim())
+      .filter(Boolean)
+      .join(", ") || "the learner's stated project requirements"
+  );
 }
 
 function selectedCStack(profile: Profile): boolean {
-  return profile.technologies.some((technology) => /(^|[^a-z])c([^a-z]|$)|c\+\+/i.test(technology.name));
+  return profile.technologies.some((technology) =>
+    /(^|[^a-z])c([^a-z]|$)|c\+\+/i.test(technology.name),
+  );
 }
 
-function looksLikeCStarter(project: { title?: string; summary?: string; stack?: string; why?: string }): boolean {
+function looksLikeCStarter(project: {
+  title?: string;
+  summary?: string;
+  stack?: string;
+  why?: string;
+}): boolean {
   return /\b(c language|gcc|clang|scanf|printf|main\.c|c calculator|cli (arithmetic )?calculator)\b/i.test(
     `${project.title ?? ""} ${project.summary ?? ""} ${project.stack ?? ""} ${project.why ?? ""}`,
   );
 }
 
-function requireSelectedStack<T extends { title?: string; summary?: string; stack?: string; why?: string }>(
-  profile: Profile,
-  result: T | T[],
-): T | T[] {
-  if (!selectedCStack(profile) && (Array.isArray(result) ? result : [result]).some(looksLikeCStarter)) {
-    throw new Error("The generated path did not match your selected stack. Please generate it again.");
+function requireSelectedStack<
+  T extends { title?: string; summary?: string; stack?: string; why?: string },
+>(profile: Profile, result: T | T[]): T | T[] {
+  if (
+    !selectedCStack(profile) &&
+    (Array.isArray(result) ? result : [result]).some(looksLikeCStarter)
+  ) {
+    throw new Error(
+      "The generated path did not match your selected stack. Please generate it again.",
+    );
   }
   return result;
 }
@@ -84,10 +111,17 @@ type AiTeachMicroLessonResponse = {
 };
 
 export const aiAnalyzeResume = createServerFn({ method: "POST" })
-  .validator((input: { text: string }) => ({ text: String(input.text).slice(0, 12000) }))
+  .validator((input: { text: string }) => ({
+    text: String(input.text).slice(0, 12000),
+  }))
   .handler(async ({ data }) => {
     return await import("./sarvam.server").then(({ sarvamJson }) =>
-      sarvamJson<{ name: string; summary: string; technologies: TechItem[]; experience: string }>(
+      sarvamJson<{
+        name: string;
+        summary: string;
+        technologies: TechItem[];
+        experience: string;
+      }>(
         key(),
         COACH,
         `Read this resume text and extract a builder profile.
@@ -141,7 +175,14 @@ Use this declared technology stack whenever it is relevant: ${stack}. Do not rep
 Return JSON: {"projects": [{"title": string, "summary": string (1 sentence), "stack": string, "why": string}]}`;
 
     const result = await import("./sarvam.server").then(({ sarvamJson }) =>
-      sarvamJson<{ projects: { title: string; summary: string; stack: string; why: string }[] }>(
+      sarvamJson<{
+        projects: {
+          title: string;
+          summary: string;
+          stack: string;
+          why: string;
+        }[];
+      }>(
         key(),
         COACH,
         `${instructions}
@@ -206,13 +247,20 @@ ${profileBrief(data.profile)}`,
     );
     requireSelectedStack(data.profile, [
       { title: plan.projectTitle, summary: plan.projectPitch },
-      ...(plan.missions ?? []).map((mission) => ({ title: mission.title, summary: mission.description, stack: mission.stack })),
+      ...(plan.missions ?? []).map((mission) => ({
+        title: mission.title,
+        summary: mission.description,
+        stack: mission.stack,
+      })),
     ]);
     return plan;
   });
 
 export const aiRetunePlan = createServerFn({ method: "POST" })
-  .validator((input: { profile: Profile; plan: Plan; activity: ActivityItem[] }) => input)
+  .validator(
+    (input: { profile: Profile; plan: Plan; activity: ActivityItem[] }) =>
+      input,
+  )
   .handler(async ({ data }) => {
     const recent = data.activity
       .slice(0, 12)
@@ -257,49 +305,62 @@ MISSION: ${JSON.stringify(data.mission).slice(0, 3000)}`,
   });
 
 export const aiTeachMicroLesson = createServerFn({ method: "POST" })
-  .validator((input: {
-    topic: string;
-    missionTitle: string;
-    missionDescription: string;
-    level: string;
-    learningMode: "practical" | "balanced" | "theory";
-    history: { role: "mentor" | "student"; text: string }[];
-    memory?: string;
-    lessonState?: string;
-    studentAnswer?: string;
-    wantsSimpler?: boolean;
-    attachmentContext?: string;
-  }) => ({
-    topic: String(input.topic).slice(0, 160),
-    missionTitle: String(input.missionTitle).slice(0, 240),
-    missionDescription: String(input.missionDescription).slice(0, 700),
-    level: String(input.level).slice(0, 80),
-    learningMode: input.learningMode,
-    history: (input.history ?? []).slice(-8).map((item) => ({ role: item.role, text: String(item.text).slice(0, 700) })),
-    memory: String(input.memory ?? "").slice(0, 900),
-    studentAnswer: String(input.studentAnswer ?? "").slice(0, 1200),
-    wantsSimpler: Boolean(input.wantsSimpler),
-    attachmentContext: String(input.attachmentContext ?? "").slice(0, 40000),
-    lessonState: String(input.lessonState ?? "hello_world") as LessonState,
-  }))
+  .validator(
+    (input: {
+      topic: string;
+      missionTitle: string;
+      missionDescription: string;
+      level: string;
+      learningMode: "practical" | "balanced" | "theory";
+      history: { role: "mentor" | "student"; text: string }[];
+      memory?: string;
+      lessonState?: string;
+      studentAnswer?: string;
+      wantsSimpler?: boolean;
+      attachmentContext?: string;
+    }) => ({
+      topic: String(input.topic).slice(0, 160),
+      missionTitle: String(input.missionTitle).slice(0, 240),
+      missionDescription: String(input.missionDescription).slice(0, 700),
+      level: String(input.level).slice(0, 80),
+      learningMode: input.learningMode,
+      history: (input.history ?? []).slice(-8).map((item) => ({
+        role: item.role,
+        text: String(item.text).slice(0, 700),
+      })),
+      memory: String(input.memory ?? "").slice(0, 900),
+      studentAnswer: String(input.studentAnswer ?? "").slice(0, 1200),
+      wantsSimpler: Boolean(input.wantsSimpler),
+      attachmentContext: String(input.attachmentContext ?? "").slice(0, 40000),
+      lessonState: String(input.lessonState ?? "hello_world") as LessonState,
+    }),
+  )
   .handler(async ({ data }) => {
     const isCurriculum = Boolean(
       data.lessonState &&
       (data.lessonState in C_CURRICULUM_MAP ||
-       data.lessonState === "arithmetic" ||
-       data.lessonState === "hello_world" ||
-       data.lessonState === "printf" ||
-       data.lessonState === "variables")
+        data.lessonState === "arithmetic" ||
+        data.lessonState === "hello_world" ||
+        data.lessonState === "printf" ||
+        data.lessonState === "variables"),
     );
-    const cContext = isCurriculum || isCContext(data.topic, data.missionTitle, data.missionDescription);
+    const cContext =
+      isCurriculum ||
+      isCContext(data.topic, data.missionTitle, data.missionDescription);
     const intent = detectIntent(data.studentAnswer, data.lessonState);
-    const learnerAskedToReset = signalsBeginner(data.studentAnswer) || data.wantsSimpler || intent === "DONT_KNOW";
+    const learnerAskedToReset =
+      signalsBeginner(data.studentAnswer) ||
+      data.wantsSimpler ||
+      intent === "DONT_KNOW";
 
     // 1. Check deterministic state machine progression first for C foundations.
     // This guarantees immediate, correct handling of "i don't know" (scaffold),
     // "yes / saw that" (advance), "hey" (friendly greeting), and repetition.
     if (cContext) {
-      const deterministic = advanceCBeginner(data.lessonState as LessonState, data.studentAnswer);
+      const deterministic = advanceCBeginner(
+        data.lessonState as LessonState,
+        data.studentAnswer,
+      );
       if (deterministic) {
         return deterministic;
       }
@@ -453,7 +514,9 @@ Return JSON with:
   "lessonState": string
 }`;
 
-    const historySummary = data.history.map((item) => `${item.role.toUpperCase()}: ${item.text}`).join("\n");
+    const historySummary = data.history
+      .map((item) => `${item.role.toUpperCase()}: ${item.text}`)
+      .join("\n");
 
     const user = `AUTHORITATIVE STATE:
 Topic: ${data.topic}
@@ -485,19 +548,31 @@ Provide the next single intervention conforming to the output contract.`;
 
       // Anti-Repeat Guard: If the model generated something matching previous assistant messages,
       // re-prompt with explicit instruction to break repetition.
-      const previousAssistantMsgs = data.history.filter((m) => m.role === "mentor").map((m) => m.text);
+      const previousAssistantMsgs = data.history
+        .filter((m) => m.role === "mentor")
+        .map((m) => m.text);
       if (isDuplicateResponse(raw.message, previousAssistantMsgs)) {
         const retryUser = `${user}\n\nCRITICAL ANTI-REPEAT ALERT:\nYour previous proposed response was already sent earlier: "${raw.message.slice(0, 100)}...". DO NOT repeat it. You MUST advance the checkpoint or ask a DIFFERENT scaffold question.`;
         try {
           raw = await import("./sarvam.server").then(({ sarvamJson }) =>
-            sarvamJson<AiTeachMicroLessonResponse>(key(), system, retryUser, 900),
+            sarvamJson<AiTeachMicroLessonResponse>(
+              key(),
+              system,
+              retryUser,
+              900,
+            ),
           );
         } catch {
           // If retry fails, use deterministic fallback
         }
       }
 
-      return normalizeTeachResult(raw, forceBeginnerReset, cContext, data.lessonState as LessonState);
+      return normalizeTeachResult(
+        raw,
+        forceBeginnerReset,
+        cContext,
+        data.lessonState as LessonState,
+      );
     } catch (error) {
       if (forceBeginnerReset && cContext) return helloWorldFallback();
       throw error;
@@ -505,24 +580,34 @@ Provide the next single intervention conforming to the output contract.`;
   });
 
 export const aiMentorChat = createServerFn({ method: "POST" })
-  .validator((input: {
-    mentorName: string;
-    mentorSpecialty: string;
-    learnerMessage: string;
-    history: { role: "mentor" | "student"; text: string }[];
-  }) => ({
-    mentorName: String(input.mentorName).slice(0, 80),
-    mentorSpecialty: String(input.mentorSpecialty).slice(0, 180),
-    learnerMessage: String(input.learnerMessage).slice(0, 1800),
-    history: (input.history ?? []).slice(-10).map((item) => ({ role: item.role, text: String(item.text).slice(0, 900) })),
-  }))
+  .validator(
+    (input: {
+      mentorName: string;
+      mentorSpecialty: string;
+      learnerMessage: string;
+      history: { role: "mentor" | "student"; text: string }[];
+    }) => ({
+      mentorName: String(input.mentorName).slice(0, 80),
+      mentorSpecialty: String(input.mentorSpecialty).slice(0, 180),
+      learnerMessage: String(input.learnerMessage).slice(0, 1800),
+      history: (input.history ?? []).slice(-10).map((item) => ({
+        role: item.role,
+        text: String(item.text).slice(0, 900),
+      })),
+    }),
+  )
   .handler(async ({ data }) => {
     const system = `You are ${data.mentorName}, a kind mentor inside BuildMyLogic. Your specialty is ${data.mentorSpecialty}.
 Use very simple English. Use short sentences. Explain one thing at a time. Be smart, practical, and honest.
 Understand Manglish (Malayalam written in English), such as manasilayilla, enikku ariyilla, entha, evidunnu thudangum. If the learner uses Manglish, reply with gentle Manglish plus clear English when useful.
 Do not shame the learner. Do not give a huge answer. Ask one helpful question when needed.
 Return JSON only: {"message":"your helpful reply"}.`;
-    const history = data.history.map((item) => `${item.role === "mentor" ? "MENTOR" : "LEARNER"}: ${item.text}`).join("\n");
+    const history = data.history
+      .map(
+        (item) =>
+          `${item.role === "mentor" ? "MENTOR" : "LEARNER"}: ${item.text}`,
+      )
+      .join("\n");
     return await import("./sarvam.server").then(({ sarvamJson }) =>
       sarvamJson<{ message: string }>(
         key(),
@@ -534,7 +619,9 @@ Return JSON only: {"message":"your helpful reply"}.`;
   });
 
 export const aiReviewSession = createServerFn({ method: "POST" })
-  .validator((input: { missionTitle: string; note: string; minutes: number }) => input)
+  .validator(
+    (input: { missionTitle: string; note: string; minutes: number }) => input,
+  )
   .handler(async ({ data }) => {
     return await import("./sarvam.server").then(({ sarvamJson }) =>
       sarvamJson<{ feedback: string; nextStep: string; skillBoost: string }>(
@@ -548,17 +635,27 @@ Return JSON: {"feedback": string (2 sentences, honest), "nextStep": string (one 
   });
 
 export const aiReviewProjectZip = createServerFn({ method: "POST" })
-  .validator((input: { fileName: string; dataBase64: string; missionTitle?: string }) => ({
-    fileName: String(input.fileName).slice(0, 180),
-    dataBase64: String(input.dataBase64).slice(0, 12_000_000),
-    missionTitle: String(input.missionTitle ?? "").slice(0, 240),
-  }))
+  .validator(
+    (input: {
+      fileName: string;
+      dataBase64: string;
+      missionTitle?: string;
+    }) => ({
+      fileName: String(input.fileName).slice(0, 180),
+      dataBase64: String(input.dataBase64).slice(0, 12_000_000),
+      missionTitle: String(input.missionTitle ?? "").slice(0, 240),
+    }),
+  )
   .handler(async ({ data }) => {
     const { unzipSync } = await import("fflate");
-    if (!data.fileName.toLowerCase().endsWith(".zip")) throw new Error("Please upload a .zip project file.");
+    if (!data.fileName.toLowerCase().endsWith(".zip"))
+      throw new Error("Please upload a .zip project file.");
 
     const binary = atob(data.dataBase64);
-    if (binary.length > 8 * 1024 * 1024) throw new Error("That ZIP is too large. Please keep project uploads under 8 MB.");
+    if (binary.length > 8 * 1024 * 1024)
+      throw new Error(
+        "That ZIP is too large. Please keep project uploads under 8 MB.",
+      );
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
 
@@ -566,20 +663,36 @@ export const aiReviewProjectZip = createServerFn({ method: "POST" })
     try {
       files = unzipSync(bytes);
     } catch {
-      throw new Error("I couldn't open that ZIP. Make sure it is a valid project archive.");
+      throw new Error(
+        "I couldn't open that ZIP. Make sure it is a valid project archive.",
+      );
     }
 
-    const ignored = /(^|\/)(node_modules|dist|build|\.git|\.next|coverage)(\/|$)/i;
-    const binaryExt = /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|mp4|mov|woff2?|ttf|eot|mp3|wav|sqlite|db)$/i;
+    const ignored =
+      /(^|\/)(node_modules|dist|build|\.git|\.next|coverage)(\/|$)/i;
+    const binaryExt =
+      /\.(png|jpe?g|gif|webp|ico|pdf|zip|gz|mp4|mov|woff2?|ttf|eot|mp3|wav|sqlite|db)$/i;
     const entries = Object.entries(files)
-      .filter(([name, content]) => !name.endsWith("/") && !ignored.test(name) && !binaryExt.test(name) && content.length < 120_000)
+      .filter(
+        ([name, content]) =>
+          !name.endsWith("/") &&
+          !ignored.test(name) &&
+          !binaryExt.test(name) &&
+          content.length < 120_000,
+      )
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(0, 80);
 
     const decoder = new TextDecoder();
-    let snapshot = entries.map(([name, content]) => `FILE: ${name}\n${decoder.decode(content).slice(0, 6000)}`).join("\n\n---\n\n");
+    let snapshot = entries
+      .map(
+        ([name, content]) =>
+          `FILE: ${name}\n${decoder.decode(content).slice(0, 6000)}`,
+      )
+      .join("\n\n---\n\n");
     snapshot = snapshot.slice(0, 70_000);
-    if (!snapshot.trim()) throw new Error("The ZIP did not contain readable source files.");
+    if (!snapshot.trim())
+      throw new Error("The ZIP did not contain readable source files.");
 
     return await import("./sarvam.server").then(({ sarvamJson }) =>
       sarvamJson<{

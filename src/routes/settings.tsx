@@ -1,10 +1,26 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Save, Trash2, Calendar, Download, ExternalLink, Check } from "lucide-react";
+import {
+  Save,
+  Trash2,
+  Calendar,
+  Download,
+  ExternalLink,
+  Check,
+} from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { logActivity, resetLoop, setLoopState, useLoop } from "@/lib/loop-store";
+import {
+  logActivity,
+  resetLoop,
+  setLoopState,
+  useLoop,
+} from "@/lib/loop-store";
 import type { TechItem } from "@/lib/loop-types";
-import { buildGoogleCalendarUrl, downloadIcsFile, syncSchedule } from "@/lib/google-calendar";
+import {
+  buildGoogleCalendarUrl,
+  downloadIcsFile,
+  syncSchedule,
+} from "@/lib/google-calendar";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -12,10 +28,14 @@ export const Route = createFileRoute("/settings")({
       { title: "Settings — BuildMyLogic" },
       {
         name: "description",
-        content: "Update your name, daily build window, goal and known technologies so BuildMyLogic plans around you.",
+        content:
+          "Update your name, daily build window, goal and known technologies so BuildMyLogic plans around you.",
       },
       { property: "og:title", content: "Settings — BuildMyLogic" },
-      { property: "og:description", content: "Your name, build window, goal and tech stack in one place." },
+      {
+        property: "og:description",
+        content: "Your name, build window, goal and tech stack in one place.",
+      },
     ],
   }),
   component: Settings,
@@ -77,8 +97,14 @@ function Settings() {
             <h3 className="text-sm font-bold">Your profile</h3>
             <div className="mt-4 space-y-4">
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Name</label>
-                <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                  Name
+                </label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={field}
+                />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
@@ -120,7 +146,9 @@ function Settings() {
 
             <div className="mt-4 flex flex-wrap items-end gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Start</label>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                  Start
+                </label>
                 <input
                   type="time"
                   value={startTime}
@@ -129,7 +157,9 @@ function Settings() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">End</label>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                  End
+                </label>
                 <input
                   type="time"
                   value={endTime}
@@ -160,7 +190,8 @@ function Settings() {
                       endTime,
                       repeatDaily,
                       reminderMinutes: 15,
-                      missionTitle: state.plan?.missions?.[0]?.title || "Daily Build",
+                      missionTitle:
+                        state.plan?.missions?.[0]?.title || "Daily Build",
                     });
                     window.open(url, "_blank", "noopener,noreferrer");
                   }}
@@ -179,7 +210,8 @@ function Settings() {
                       endTime,
                       repeatDaily,
                       reminderMinutes: 15,
-                      missionTitle: state.plan?.missions?.[0]?.title || "Daily Build",
+                      missionTitle:
+                        state.plan?.missions?.[0]?.title || "Daily Build",
                     });
                   }}
                   className="btn-base btn-outline text-xs py-1.5 px-3 flex items-center gap-1.5"
@@ -207,7 +239,11 @@ function Settings() {
                         key={level}
                         type="button"
                         onClick={() =>
-                          setTech((prev) => prev.map((x, xi) => (xi === i ? { ...x, level } : x)))
+                          setTech((prev) =>
+                            prev.map((x, xi) =>
+                              xi === i ? { ...x, level } : x,
+                            ),
+                          )
                         }
                         className={`rounded-lg px-2.5 py-1 text-[11.5px] font-semibold capitalize transition-colors ${
                           t.level === level
@@ -220,7 +256,9 @@ function Settings() {
                     ))}
                     <button
                       type="button"
-                      onClick={() => setTech((prev) => prev.filter((_, xi) => xi !== i))}
+                      onClick={() =>
+                        setTech((prev) => prev.filter((_, xi) => xi !== i))
+                      }
                       aria-label={`Remove ${t.name}`}
                       className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
                     >
@@ -230,7 +268,9 @@ function Settings() {
                 </div>
               ))}
               {tech.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nothing added yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  Nothing added yet.
+                </p>
               )}
             </div>
             <div className="mt-4 flex gap-2.5">
@@ -245,7 +285,10 @@ function Settings() {
                 onClick={() => {
                   const value = newTech.trim();
                   if (!value) return;
-                  setTech((prev) => [...prev, { name: value, level: "beginner" }]);
+                  setTech((prev) => [
+                    ...prev,
+                    { name: value, level: "beginner" },
+                  ]);
                   setNewTech("");
                 }}
                 className="btn-base btn-outline shrink-0"
@@ -256,11 +299,19 @@ function Settings() {
           </section>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={save} className="btn-base btn-primary-solid">
+            <button
+              type="button"
+              onClick={save}
+              className="btn-base btn-primary-solid"
+            >
               <Save className="h-4 w-4" />
               Save changes
             </button>
-            {saved && <span className="text-xs font-semibold text-accent-foreground">Saved.</span>}
+            {saved && (
+              <span className="text-xs font-semibold text-accent-foreground">
+                Saved.
+              </span>
+            )}
           </div>
         </div>
 
@@ -272,12 +323,18 @@ function Settings() {
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-muted p-3">
-                <p className="display text-xl font-extrabold">{state.plan?.missions.length ?? 0}</p>
+                <p className="display text-xl font-extrabold">
+                  {state.plan?.missions.length ?? 0}
+                </p>
                 <p className="text-[11px] text-muted-foreground">Missions</p>
               </div>
               <div className="rounded-xl bg-muted p-3">
-                <p className="display text-xl font-extrabold">{state.sessions.length}</p>
-                <p className="text-[11px] text-muted-foreground">Sessions logged</p>
+                <p className="display text-xl font-extrabold">
+                  {state.sessions.length}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Sessions logged
+                </p>
               </div>
             </div>
           </section>
@@ -285,8 +342,8 @@ function Settings() {
           <section className="card-surface p-5">
             <h3 className="text-sm font-bold">Start over</h3>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              This clears your resume, plan, missions and session history, and takes you back to the
-              introduction.
+              This clears your resume, plan, missions and session history, and
+              takes you back to the introduction.
             </p>
             <button
               type="button"

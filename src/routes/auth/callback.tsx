@@ -1,6 +1,6 @@
 /**
  * BuildMyLogic — OAuth Callback Handler
- * 
+ *
  * Safely processes redirects from Supabase Google OAuth, extracts session
  * credentials from URL hash or code exchange, and redirects learner to Dashboard.
  */
@@ -50,11 +50,13 @@ function AuthCallback() {
         }
 
         // 3. Listen for auth state change (e.g., hash fragment token detection)
-        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-          if (session && isMounted) {
-            void navigate({ to: "/dashboard" });
-          }
-        });
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          (event, session) => {
+            if (session && isMounted) {
+              void navigate({ to: "/dashboard" });
+            }
+          },
+        );
 
         // Fallback timer: if already signed in or after brief wait, head to dashboard
         setTimeout(() => {
@@ -87,8 +89,10 @@ function AuthCallback() {
       <div className="text-center card-surface p-8 max-w-sm w-full">
         <div className="mb-4 h-9 w-9 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
         <p className="text-sm font-semibold text-foreground">{status}</p>
-        <p className="text-xs text-muted-foreground mt-2">Connecting your BuildMyLogic session…</p>
-        
+        <p className="text-xs text-muted-foreground mt-2">
+          Connecting your BuildMyLogic session…
+        </p>
+
         {errorMessage && (
           <div className="mt-4">
             <button

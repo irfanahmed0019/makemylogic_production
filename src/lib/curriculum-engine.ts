@@ -55,14 +55,26 @@ export const C_CURRICULUM_MAP: Record<CConceptId, CurriculumStep> = {
     title: "1 · Hello World",
     shortName: "Hello World",
     concept: "Running your very first C program",
-    initialQuestion: "What C function outputs text to the terminal screen? (Hint: starts with 'p')",
+    initialQuestion:
+      "What C function outputs text to the terminal screen? (Hint: starts with 'p')",
     expectedKeywords: ["printf", "print", "printf()"],
-    teachingExplanation: "In C, `printf` is the standard library function that displays text on the screen. Statements run inside `main()`.",
+    teachingExplanation:
+      "In C, `printf` is the standard library function that displays text on the screen. Statements run inside `main()`.",
     cCodeSnippet: `#include <stdio.h>\n\nint main(void) {\n    printf("Hello World\\n");\n    return 0;\n}`,
     drills: [
-      { question: "What is the name of the function that prints text to the screen in C?", expectedKeywords: ["printf"] },
-      { question: "Where does program execution always begin in a C program?", expectedKeywords: ["main"] },
-      { question: "What special character creates a new line in printf?", expectedKeywords: ["\\n", "newline"] },
+      {
+        question:
+          "What is the name of the function that prints text to the screen in C?",
+        expectedKeywords: ["printf"],
+      },
+      {
+        question: "Where does program execution always begin in a C program?",
+        expectedKeywords: ["main"],
+      },
+      {
+        question: "What special character creates a new line in printf?",
+        expectedKeywords: ["\\n", "newline"],
+      },
     ],
   },
   print_name: {
@@ -71,14 +83,25 @@ export const C_CURRICULUM_MAP: Record<CConceptId, CurriculumStep> = {
     title: "2 · Print Your Name",
     shortName: "Print Name",
     concept: "Customizing text with printf",
-    initialQuestion: "In `printf(\"Hello World\\n\");` what quotes wrap the text? (Hint: single or double)",
-    expectedKeywords: ["double", "double quotes", "quotes", "\""],
-    teachingExplanation: "In C, text strings must always be enclosed in double quotes `\"...\"`. Single quotes `'...'` are for single characters.",
+    initialQuestion:
+      'In `printf("Hello World\\n");` what quotes wrap the text? (Hint: single or double)',
+    expectedKeywords: ["double", "double quotes", "quotes", '"'],
+    teachingExplanation:
+      "In C, text strings must always be enclosed in double quotes `\"...\"`. Single quotes `'...'` are for single characters.",
     cCodeSnippet: `printf("Hello, Irfan!\\n");`,
     drills: [
-      { question: "What punctuation mark ends every statement in C?", expectedKeywords: [";", "semicolon"] },
-      { question: "What quotes wrap strings in C: single or double?", expectedKeywords: ["double"] },
-      { question: "Can printf print your own name? (yes or no)", expectedKeywords: ["yes", "yup", "yeah"] },
+      {
+        question: "What punctuation mark ends every statement in C?",
+        expectedKeywords: [";", "semicolon"],
+      },
+      {
+        question: "What quotes wrap strings in C: single or double?",
+        expectedKeywords: ["double"],
+      },
+      {
+        question: "Can printf print your own name? (yes or no)",
+        expectedKeywords: ["yes", "yup", "yeah"],
+      },
     ],
   },
   variables: {
@@ -87,14 +110,25 @@ export const C_CURRICULUM_MAP: Record<CConceptId, CurriculumStep> = {
     title: "3 · Variables",
     shortName: "Variables",
     concept: "A named box that stores a number",
-    initialQuestion: "What keyword in C declares a whole number variable? (Hint: starts with 'i')",
+    initialQuestion:
+      "What keyword in C declares a whole number variable? (Hint: starts with 'i')",
     expectedKeywords: ["int", "integer"],
-    teachingExplanation: "A variable is like a labeled box in memory. `int` stands for integer (whole number), like: `int score = 10;`.",
+    teachingExplanation:
+      "A variable is like a labeled box in memory. `int` stands for integer (whole number), like: `int score = 10;`.",
     cCodeSnippet: `int score = 10;`,
     drills: [
-      { question: "In `int count = 5;`, what is the variable name?", expectedKeywords: ["count"] },
-      { question: "What symbol assigns a value to a variable in C?", expectedKeywords: ["="] },
-      { question: "What keyword declares an integer variable in C?", expectedKeywords: ["int"] },
+      {
+        question: "In `int count = 5;`, what is the variable name?",
+        expectedKeywords: ["count"],
+      },
+      {
+        question: "What symbol assigns a value to a variable in C?",
+        expectedKeywords: ["="],
+      },
+      {
+        question: "What keyword declares an integer variable in C?",
+        expectedKeywords: ["int"],
+      },
     ],
   },
   input: {
@@ -103,14 +137,25 @@ export const C_CURRICULUM_MAP: Record<CConceptId, CurriculumStep> = {
     title: "4 · User Input with scanf",
     shortName: "User Input",
     concept: "Reading input from the keyboard",
-    initialQuestion: "In `scanf(\"%d\", &num);` what symbol comes right before `num`? (Hint: use &)",
+    initialQuestion:
+      'In `scanf("%d", &num);` what symbol comes right before `num`? (Hint: use &)',
     expectedKeywords: ["&", "ampersand", "and"],
-    teachingExplanation: "`scanf` pauses and waits for user input from the keyboard. The `&` (address-of) operator tells C where to save the value.",
+    teachingExplanation:
+      "`scanf` pauses and waits for user input from the keyboard. The `&` (address-of) operator tells C where to save the value.",
     cCodeSnippet: `int num;\nscanf("%d", &num);`,
     drills: [
-      { question: "What function reads keyboard input from the user in C?", expectedKeywords: ["scanf"] },
-      { question: "What symbol must go before the variable name in scanf?", expectedKeywords: ["&", "ampersand"] },
-      { question: "What format code reads a whole number in scanf: %d or %s?", expectedKeywords: ["%d"] },
+      {
+        question: "What function reads keyboard input from the user in C?",
+        expectedKeywords: ["scanf"],
+      },
+      {
+        question: "What symbol must go before the variable name in scanf?",
+        expectedKeywords: ["&", "ampersand"],
+      },
+      {
+        question: "What format code reads a whole number in scanf: %d or %s?",
+        expectedKeywords: ["%d"],
+      },
     ],
   },
   basic_math: {
@@ -129,14 +174,25 @@ int sum = a + b;
 
 Are you ready to write code for subtraction and division? (Say yes to continue)`,
     expectedKeywords: ["yes", "yeah", "yup", "ok", "ready", "aahn", "athe"],
-    teachingExplanation: "In C, you can use + (add), - (subtract), * (multiply), and / (divide) to perform calculations.",
+    teachingExplanation:
+      "In C, you can use + (add), - (subtract), * (multiply), and / (divide) to perform calculations.",
     cCodeSnippet: `int a = 10;
 int b = 5;
 int sum = a + b;`,
     drills: [
-      { question: "Write the C code to subtract `b` from `a` and store it in `diff`. (Hint: use `-`)", expectedKeywords: ["a - b", "a-b", "a - b;"] },
-      { question: "Write the C code to multiply `a` and `b`. (Hint: use `*`)", expectedKeywords: ["a * b", "a*b", "a * b;"] },
-      { question: "Write the C code to divide `a` by `b`. (Hint: use `/`)", expectedKeywords: ["a / b", "a/b", "a / b;"] },
+      {
+        question:
+          "Write the C code to subtract `b` from `a` and store it in `diff`. (Hint: use `-`)",
+        expectedKeywords: ["a - b", "a-b", "a - b;"],
+      },
+      {
+        question: "Write the C code to multiply `a` and `b`. (Hint: use `*`)",
+        expectedKeywords: ["a * b", "a*b", "a * b;"],
+      },
+      {
+        question: "Write the C code to divide `a` by `b`. (Hint: use `/`)",
+        expectedKeywords: ["a / b", "a/b", "a / b;"],
+      },
     ],
   },
   if: {
@@ -147,12 +203,24 @@ int sum = a + b;`,
     concept: "Making decisions and guarding against errors",
     initialQuestion: "Which keyword checks a condition in C? (Hint: use `if`)",
     expectedKeywords: ["if", "if statement", "if condition", "if()"],
-    teachingExplanation: "An `if` statement tests a condition inside parentheses: `if (b == 0) { ... }`. If true, the code inside executes.",
+    teachingExplanation:
+      "An `if` statement tests a condition inside parentheses: `if (b == 0) { ... }`. If true, the code inside executes.",
     cCodeSnippet: `if (b == 0) {\n    printf("Error: Cannot divide by zero!\\n");\n}`,
     drills: [
-      { question: "In `if (x == 5)`, what operator checks equality?", expectedKeywords: ["=="] },
-      { question: "Does an if block execute when the condition is true or false?", expectedKeywords: ["true"] },
-      { question: "What brackets wrap the condition in an if statement: ( ) or [ ]?", expectedKeywords: ["()", "( )", "parentheses", "round"] },
+      {
+        question: "In `if (x == 5)`, what operator checks equality?",
+        expectedKeywords: ["=="],
+      },
+      {
+        question:
+          "Does an if block execute when the condition is true or false?",
+        expectedKeywords: ["true"],
+      },
+      {
+        question:
+          "What brackets wrap the condition in an if statement: ( ) or [ ]?",
+        expectedKeywords: ["()", "( )", "parentheses", "round"],
+      },
     ],
   },
   else: {
@@ -161,14 +229,27 @@ int sum = a + b;`,
     title: "11 · else Statements",
     shortName: "else Statements",
     concept: "Running code when the if condition is false",
-    initialQuestion: "Which keyword runs fallback code when `if` is false? (Hint: use `else`)",
+    initialQuestion:
+      "Which keyword runs fallback code when `if` is false? (Hint: use `else`)",
     expectedKeywords: ["else", "else statement", "else block"],
-    teachingExplanation: "`else` runs when the matching `if` condition evaluated to false: `if (b == 0) { ... } else { ... }`.",
+    teachingExplanation:
+      "`else` runs when the matching `if` condition evaluated to false: `if (b == 0) { ... } else { ... }`.",
     cCodeSnippet: `if (b == 0) {\n    printf("Cannot divide by 0\\n");\n} else {\n    printf("Result: %d\\n", a / b);\n}`,
     drills: [
-      { question: "Can an else block exist without an if before it? (yes or no)", expectedKeywords: ["no"] },
-      { question: "Does else have its own condition like else (x == 5)? (yes or no)", expectedKeywords: ["no"] },
-      { question: "If condition is true, does the else block run? (yes or no)", expectedKeywords: ["no"] },
+      {
+        question:
+          "Can an else block exist without an if before it? (yes or no)",
+        expectedKeywords: ["no"],
+      },
+      {
+        question:
+          "Does else have its own condition like else (x == 5)? (yes or no)",
+        expectedKeywords: ["no"],
+      },
+      {
+        question: "If condition is true, does the else block run? (yes or no)",
+        expectedKeywords: ["no"],
+      },
     ],
   },
   comparison: {
@@ -177,14 +258,25 @@ int sum = a + b;`,
     title: "12 · Comparison Operators",
     shortName: "Comparison",
     concept: "Comparing numbers in C",
-    initialQuestion: "What symbol means 'not equal to' in C? (Hint: use `!` and `=`)",
+    initialQuestion:
+      "What symbol means 'not equal to' in C? (Hint: use `!` and `=`)",
     expectedKeywords: ["!=", "not equal", "! =", "exclamation"],
-    teachingExplanation: "In C, `==` checks equal to, and `!=` checks not equal to. The `!` character means NOT.",
+    teachingExplanation:
+      "In C, `==` checks equal to, and `!=` checks not equal to. The `!` character means NOT.",
     cCodeSnippet: `if (choice != 0) { ... }`,
     drills: [
-      { question: "What operator checks 'greater than' in C?", expectedKeywords: [">"] },
-      { question: "What operator checks 'less than' in C?", expectedKeywords: ["<"] },
-      { question: "What operator checks 'equal to' in C: = or ==?", expectedKeywords: ["=="] },
+      {
+        question: "What operator checks 'greater than' in C?",
+        expectedKeywords: [">"],
+      },
+      {
+        question: "What operator checks 'less than' in C?",
+        expectedKeywords: ["<"],
+      },
+      {
+        question: "What operator checks 'equal to' in C: = or ==?",
+        expectedKeywords: ["=="],
+      },
     ],
   },
   loops: {
@@ -193,14 +285,26 @@ int sum = a + b;`,
     title: "13 · Loops (while)",
     shortName: "Loops",
     concept: "Repeating calculations without closing the app",
-    initialQuestion: "Which keyword in C repeats code while a condition is true? (Hint: use `while`)",
+    initialQuestion:
+      "Which keyword in C repeats code while a condition is true? (Hint: use `while`)",
     expectedKeywords: ["while", "while loop", "while()"],
-    teachingExplanation: "A `while` loop keeps repeating instructions as long as its condition stays true: `while (choice != 0) { ... }`.",
+    teachingExplanation:
+      "A `while` loop keeps repeating instructions as long as its condition stays true: `while (choice != 0) { ... }`.",
     cCodeSnippet: `while (choice != 0) {\n    // calculate again!\n}`,
     drills: [
-      { question: "What keyword creates a loop in C: while or when?", expectedKeywords: ["while"] },
-      { question: "In `while (choice != 0);`, what number stops the loop?", expectedKeywords: ["0", "zero"] },
-      { question: "Why does a calculator use a loop: to repeat or to exit immediately?", expectedKeywords: ["repeat"] },
+      {
+        question: "What keyword creates a loop in C: while or when?",
+        expectedKeywords: ["while"],
+      },
+      {
+        question: "In `while (choice != 0);`, what number stops the loop?",
+        expectedKeywords: ["0", "zero"],
+      },
+      {
+        question:
+          "Why does a calculator use a loop: to repeat or to exit immediately?",
+        expectedKeywords: ["repeat"],
+      },
     ],
   },
   cli_calculator: {
@@ -209,9 +313,22 @@ int sum = a + b;`,
     title: "14 · Build CLI Calculator",
     shortName: "CLI Calculator",
     concept: "You are ready to build the complete CLI Calculator!",
-    initialQuestion: "You've mastered all 13 C building blocks! Are you ready to open VS Code and assemble your CLI Calculator?",
-    expectedKeywords: ["yes", "ready", "let's go", "sure", "ok", "yup", "yeah", "open", "athe", "aahn"],
-    teachingExplanation: "You now have demonstrated mastery of printf, variables, scanf, +, -, *, /, %, if/else, and while loops!",
+    initialQuestion:
+      "You've mastered all 13 C building blocks! Are you ready to open VS Code and assemble your CLI Calculator?",
+    expectedKeywords: [
+      "yes",
+      "ready",
+      "let's go",
+      "sure",
+      "ok",
+      "yup",
+      "yeah",
+      "open",
+      "athe",
+      "aahn",
+    ],
+    teachingExplanation:
+      "You now have demonstrated mastery of printf, variables, scanf, +, -, *, /, %, if/else, and while loops!",
     cCodeSnippet: `// Ready to build in VS Code!`,
     drills: [
       { question: "Are you ready to build?", expectedKeywords: ["yes"] },
@@ -259,7 +376,9 @@ const MANGLISH_READY = [
   /\b(yes|yeah|yep|yup|saw\s*that|works|printed|done|got\s*it|ready|next)\b/i,
 ];
 
-export function detectCurriculumIntent(input: string): LearnerIntent | "PEDAGOGY_REQUEST" {
+export function detectCurriculumIntent(
+  input: string,
+): LearnerIntent | "PEDAGOGY_REQUEST" {
   const text = input.trim().toLowerCase();
   if (!text) return "QUESTION";
 
@@ -288,7 +407,7 @@ export function detectCurriculumIntent(input: string): LearnerIntent | "PEDAGOGY
 export function evaluateCurriculumAnswer(
   conceptId: CConceptId,
   rawAnswer: string,
-  drillIndex?: number
+  drillIndex?: number,
 ): {
   isCorrect: boolean;
   userValue?: number | string;
@@ -302,7 +421,11 @@ export function evaluateCurriculumAnswer(
   let expectedKw: string[] = step.expectedKeywords;
 
   // If in drill mode (drillIndex: 0, 1, 2)
-  if (drillIndex !== undefined && drillIndex >= 0 && drillIndex < step.drills.length) {
+  if (
+    drillIndex !== undefined &&
+    drillIndex >= 0 &&
+    drillIndex < step.drills.length
+  ) {
     const drill = step.drills[drillIndex];
     expectedMath = drill.expectedMathAnswer;
     expectedKw = drill.expectedKeywords;
@@ -339,7 +462,10 @@ export function evaluateCurriculumAnswer(
   return { isCorrect: false };
 }
 
-export function parseDrillState(lessonState: string): { conceptId: CConceptId; drillIndex?: number } {
+export function parseDrillState(lessonState: string): {
+  conceptId: CConceptId;
+  drillIndex?: number;
+} {
   const parts = lessonState.split("_drill_");
   const conceptId = parts[0] as CConceptId;
   const drillIndex = parts.length > 1 ? parseInt(parts[1], 10) : undefined;
@@ -366,4 +492,3 @@ export function getCurriculumProgress(completed: CConceptId[]): {
     completedList: completed,
   };
 }
-

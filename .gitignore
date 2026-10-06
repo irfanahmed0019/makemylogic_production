@@ -22,3 +22,9 @@ coverage/
 .vscode/
 
 .wrangler/
+
+# Local tool state and test artifacts
+.freebuff/
+.tanstack/
+vscode-extension/.vscode-test/
+vscode-extension/sidebar-preview.html

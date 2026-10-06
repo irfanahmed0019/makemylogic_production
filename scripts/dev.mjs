@@ -6,7 +6,9 @@ const bridgePort = Number(process.env.LOOP_BRIDGE_PORT || 8091);
 
 async function bridgeAlreadyRunning() {
   try {
-    const response = await fetch(`http://127.0.0.1:${bridgePort}/health`, { signal: AbortSignal.timeout(700) });
+    const response = await fetch(`http://127.0.0.1:${bridgePort}/health`, {
+      signal: AbortSignal.timeout(700),
+    });
     return response.ok;
   } catch {
     return false;
@@ -16,11 +18,21 @@ async function bridgeAlreadyRunning() {
 const reuseBridge = await bridgeAlreadyRunning();
 const bridge = reuseBridge
   ? null
-  : spawn(process.execPath, [fileURLToPath(new URL("./local-folder-picker.mjs", import.meta.url))], { stdio: "inherit" });
+  : spawn(
+      process.execPath,
+      [fileURLToPath(new URL("./local-folder-picker.mjs", import.meta.url))],
+      { stdio: "inherit" },
+    );
 
-if (reuseBridge) console.log(`[LOOP] Reusing existing desktop bridge on 127.0.0.1:${bridgePort}`);
+if (reuseBridge)
+  console.log(
+    `[LOOP] Reusing existing desktop bridge on 127.0.0.1:${bridgePort}`,
+  );
 
-const vite = spawn(npm, ["exec", "vite", "--", ...process.argv.slice(2)], { stdio: "inherit", shell: false });
+const vite = spawn(npm, ["exec", "vite", "--", ...process.argv.slice(2)], {
+  stdio: "inherit",
+  shell: false,
+});
 let shuttingDown = false;
 
 function shutdown(code = 0) {
@@ -31,8 +43,12 @@ function shutdown(code = 0) {
   setTimeout(() => process.exit(code), 50);
 }
 
-bridge?.on("error", (error) => console.error("[LOOP] Desktop bridge failed to start:", error));
-vite.on("error", (error) => console.error("[LOOP] Vite failed to start:", error));
+bridge?.on("error", (error) =>
+  console.error("[LOOP] Desktop bridge failed to start:", error),
+);
+vite.on("error", (error) =>
+  console.error("[LOOP] Vite failed to start:", error),
+);
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 vite.on("exit", (code, signal) => shutdown(code ?? (signal ? 1 : 0)));

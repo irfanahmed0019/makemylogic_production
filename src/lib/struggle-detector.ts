@@ -18,7 +18,7 @@ export type StruggleAssessment = {
 export function assessStruggle(
   state: LearningState,
   latestIntent: string,
-  errorCount = 0
+  errorCount = 0,
 ): StruggleAssessment {
   const attempts = state.attempts || 1;
   const hintsUsed = state.hintsUsed || 0;
@@ -38,7 +38,8 @@ export function assessStruggle(
       isStruggling: false,
       hintLevel: hintsUsed,
       recommendedAction: "advance",
-      rationale: "Repetition detected; advance to avoid stuck conversation loop.",
+      rationale:
+        "Repetition detected; advance to avoid stuck conversation loop.",
     };
   }
 

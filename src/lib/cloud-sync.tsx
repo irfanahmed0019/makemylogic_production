@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { LoopState } from "./loop-types";
 import { loadLoopStateFromCloud, saveLoopStateToCloud, useAuth } from "./auth";
-import { getLoopState, normalizeLoopState, setLoopState, useLoop } from "./loop-store";
+import {
+  getLoopState,
+  normalizeLoopState,
+  setLoopState,
+  useLoop,
+} from "./loop-store";
 
 export function CloudSync() {
   const auth = useAuth();
@@ -45,9 +50,13 @@ export function CloudSync() {
     const serialized = JSON.stringify(state);
     if (serialized === lastSaved.current) return;
     const timer = window.setTimeout(() => {
-      void saveLoopStateToCloud(state).then((saved) => {
-        if (saved) lastSaved.current = serialized;
-      }).catch((error) => console.error("BuildMyLogic cloud save failed", error));
+      void saveLoopStateToCloud(state)
+        .then((saved) => {
+          if (saved) lastSaved.current = serialized;
+        })
+        .catch((error) =>
+          console.error("BuildMyLogic cloud save failed", error),
+        );
     }, 700);
     return () => window.clearTimeout(timer);
   }, [auth, hydratedUid, state]);

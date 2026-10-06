@@ -54,16 +54,22 @@ export function buildLearnerMissionReview(
   mission?: { title: string; difficulty?: number; stack?: string },
   hintsUsed = 1,
   testsPassedCount = 8,
-  testsTotalCount = 10
+  testsTotalCount = 10,
 ): LearnerMissionReview {
   const diffLevel = mission?.difficulty ?? 2;
   const diffLabel = DIFFICULTY_LABELS[diffLevel] ?? "Level 2 — Easy";
 
   // Correctness based on test ratio (default 8/10 or inferred from tech score)
-  const correctness = Math.min(100, Math.max(50, Math.round((testsPassedCount / testsTotalCount) * 100)));
+  const correctness = Math.min(
+    100,
+    Math.max(50, Math.round((testsPassedCount / testsTotalCount) * 100)),
+  );
 
   // Problem Solving: evaluated relative to beginner/expected level (70-85 range for compiling code)
-  const problemSolving = Math.min(95, Math.max(55, Math.round(technical.score * 0.4 + 50)));
+  const problemSolving = Math.min(
+    95,
+    Math.max(55, Math.round(technical.score * 0.4 + 50)),
+  );
 
   // Debugging / Recovery: high if user resolved errors and produced working code
   const debuggingRecovery = Math.min(96, Math.max(60, 84));
@@ -77,11 +83,11 @@ export function buildLearnerMissionReview(
 
   // Weighted calculation (40% + 20% + 15% + 15% + 10% = 100%)
   const weighted = Math.round(
-    correctness * 0.40 +
-    problemSolving * 0.20 +
-    debuggingRecovery * 0.15 +
-    independence * 0.15 +
-    edgeCases * 0.10
+    correctness * 0.4 +
+      problemSolving * 0.2 +
+      debuggingRecovery * 0.15 +
+      independence * 0.15 +
+      edgeCases * 0.1,
   );
 
   const overallScore = Math.min(100, Math.max(40, weighted));
@@ -134,4 +140,3 @@ export function buildLearnerMissionReview(
     nextDifficultyLabel: nextDiff,
   };
 }
-

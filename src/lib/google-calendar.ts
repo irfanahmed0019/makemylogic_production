@@ -1,6 +1,6 @@
 /**
  * BuildMyLogic — Google Calendar & Schedule Synchronization
- * 
+ *
  * Provides automated Google Calendar event generation, .ICS export,
  * and Supabase persistence for learner build rhythm reminders.
  */
@@ -11,7 +11,7 @@ import { logActivity, setLoopState } from "./loop-store";
 
 export type ScheduleConfig = {
   startTime: string; // "HH:MM" e.g. "19:00"
-  endTime: string;   // "HH:MM" e.g. "20:00"
+  endTime: string; // "HH:MM" e.g. "20:00"
   timezone?: string; // e.g. "Asia/Kolkata" or Intl.DateTimeFormat().resolvedOptions().timeZone
   repeatDaily: boolean;
   reminderMinutes: number;
@@ -49,7 +49,10 @@ export function buildGoogleCalendarUrl(config: ScheduleConfig): string {
     ? `BuildMyLogic: ${config.missionTitle}`
     : `BuildMyLogic — Daily Build Session`;
 
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://buildmylogic.app";
+  const baseUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://buildmylogic.app";
   const sessionUrl = `${baseUrl}/sessions`;
 
   const details = [
@@ -61,7 +64,9 @@ export function buildGoogleCalendarUrl(config: ScheduleConfig): string {
     `⚡ VS Code Extension & Live Coach ready: ${baseUrl}/learn`,
     ``,
     `"Ship the system, then explain the design."`,
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const startUtc = formatDateTimeForGoogle(config.startTime, 0);
   const endUtc = formatDateTimeForGoogle(config.endTime, 0);
@@ -72,7 +77,10 @@ export function buildGoogleCalendarUrl(config: ScheduleConfig): string {
     dates: `${startUtc}/${endUtc}`,
     details: details,
     location: "BuildMyLogic Platform (Online)",
-    ctz: config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+    ctz:
+      config.timezone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      "Asia/Kolkata",
   });
 
   if (config.repeatDaily) {
@@ -126,7 +134,9 @@ export function downloadIcsFile(config: ScheduleConfig): void {
     "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
-  ].filter(Boolean).join("\r\n");
+  ]
+    .filter(Boolean)
+    .join("\r\n");
 
   const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -163,7 +173,10 @@ export async function syncSchedule(config: ScheduleConfig): Promise<boolean> {
       user_id: auth.uid,
       start_time: config.startTime,
       end_time: config.endTime,
-      timezone: config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+      timezone:
+        config.timezone ||
+        Intl.DateTimeFormat().resolvedOptions().timeZone ||
+        "Asia/Kolkata",
       repeat_daily: config.repeatDaily,
       calendar_enabled: true,
       reminder_minutes: config.reminderMinutes,
