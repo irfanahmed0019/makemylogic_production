@@ -3,7 +3,7 @@
   "publisher": "buildmylogic",
   "displayName": "BuildMyLogic",
   "description": "A local-first coding teacher with learning challenges and Python feedback.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "files": [
     "dist/**",
     "media/**",
@@ -30,7 +30,7 @@
       "properties": {
         "buildMyLogic.apiBaseUrl": {
           "type": "string",
-          "default": "https://makemylogic-production.vercel.app",
+          "default": "https://makemylogicproductiondddd.vercel.app",
           "description": "BuildMyLogic API base URL. Use http://localhost:8080 for a local web server. This contains no secret."
         },
         "buildMyLogic.session": {
@@ -98,5 +98,11 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Local commands and source submissions require a trusted workspace."
+    }
   }
 }
