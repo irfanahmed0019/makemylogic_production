@@ -1,6 +1,6 @@
 import "./lib/error-capture";
 
-import { AUTH_TEMPORARILY_DISABLED } from "./lib/auth-flag";
+import { authenticatedUserId } from "./lib/request-auth.server";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import {
@@ -146,30 +146,12 @@ function rateLimit(
   return true;
 }
 
-async function authenticatedUserId(
-  request: Request,
-): Promise<string | undefined> {
-  const authorization = request.headers.get("authorization")?.trim() ?? "";
-  const accessToken = authorization.toLowerCase().startsWith("bearer ")
-    ? authorization.slice(7).trim()
-    : "";
-  if (!accessToken) return undefined;
-  const supabaseUrl = process.env["VITE_SUPABASE_URL"]?.trim();
-  const supabaseAnonKey = process.env["VITE_SUPABASE_ANON_KEY"]?.trim();
-  if (!supabaseUrl || !supabaseAnonKey) return undefined;
-  try {
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        apikey: supabaseAnonKey,
-        authorization: `Bearer ${accessToken}`,
-      },
-    });
-    if (!response.ok) return undefined;
-    const user = (await response.json()) as { id?: unknown };
-    return typeof user.id === "string" && user.id ? user.id : undefined;
-  } catch {
-    return undefined;
-  }
+// A random 128-bit Session ID is the scoped VS Code capability. Only sessions
+// created under verified login qualify. Supplied bearer tokens must match owner.
+async function sessionAuthorized(request: Request, session: { userId: string; sessionId: string; authenticatedOwner?: boolean }): Promise<boolean> {
+  if (session.authenticatedOwner !== true || !/^[0-9a-f-]{36}$/i.test(session.userId) || !/^BML-[A-F0-9]{32}$/.test(session.sessionId)) return false;
+  if (!request.headers.has("authorization")) return true;
+  return (await authenticatedUserId(request)) === session.userId;
 }
 
 async function handleBuildMyLogicApi(
@@ -203,49 +185,16 @@ async function handleBuildMyLogicApi(
         429,
       );
     const body = await readJson(request);
-    const configuredSupabase = Boolean(
-      process.env["VITE_SUPABASE_URL"]?.trim() &&
-      process.env["VITE_SUPABASE_ANON_KEY"]?.trim(),
-    );
     const authenticatedId = await authenticatedUserId(request);
-    const requestedId = clean(body.user_id ?? body.userId, 180);
-    const localDevelopment =
-      ["localhost", "127.0.0.1"].includes(url.hostname) &&
-      process.env.NODE_ENV !== "production";
-    // TEMPORARY: auth is paused (AUTH_TEMPORARILY_DISABLED), so a session can be
-    // created without a bearer token until sign-in is switched back on.
-    const authPaused = AUTH_TEMPORARILY_DISABLED;
-    if (
-      !authPaused &&
-      configuredSupabase &&
-      !authenticatedId &&
-      !localDevelopment
-    )
-      return jsonResponse(
-        request,
-        {
-          ok: false,
-          error: "Sign in to BuildMyLogic before starting a VS Code session.",
-        },
-        401,
-      );
-    if (
-      !authPaused &&
-      authenticatedId &&
-      requestedId &&
-      authenticatedId !== requestedId
-    )
-      return jsonResponse(
-        request,
-        {
-          ok: false,
-          error: "Session user does not match the authenticated learner.",
-        },
-        403,
-      );
-    body.user_id = authenticatedId ?? (requestedId || "local-builder");
+    if (!authenticatedId)
+      return jsonResponse(request, { ok: false, error: "Sign in to BuildMyLogic before starting a VS Code session." }, 401);
+    const requestedId = clean(body["user_id"] ?? body["userId"], 180);
+    if (requestedId && requestedId !== authenticatedId)
+      return jsonResponse(request, { ok: false, error: "Session user does not match the authenticated learner." }, 403);
+    body["user_id"] = authenticatedId;
+    delete body["userId"];
     try {
-      const session = await startLearningSession(body);
+      const session = await startLearningSession(body, authenticatedId);
       return jsonResponse(request, {
         ok: true,
         session_id: session.sessionId,
@@ -275,6 +224,10 @@ async function handleBuildMyLogicApi(
         429,
       );
     const body = await readJson(request);
+    const sessionId = clean(body["session_id"], 40).toUpperCase();
+    const session = await verifySession(sessionId);
+    if (!session || !(await sessionAuthorized(request, session)))
+      return jsonResponse(request, { ok: false, error: "Invalid, expired, or unauthorized session." }, 401);
     const state = await connectLearningSession(body);
     return state
       ? jsonResponse(request, { ok: true, session: state })
@@ -303,7 +256,7 @@ async function handleBuildMyLogicApi(
       decodeURIComponent(learningMatch[1] ?? "").toUpperCase(),
       learningMatch[2] === "state",
     );
-    if (!session)
+    if (!session || !(await sessionAuthorized(request, session)))
       return jsonResponse(
         request,
         { ok: false, error: "Invalid, expired, or unauthorized session." },
@@ -338,9 +291,9 @@ async function handleBuildMyLogicApi(
           ok: true,
           state: recordEvent(
             session,
-            clean(body.event_type, 80),
-            body.payload && typeof body.payload === "object"
-              ? (body.payload as Record<string, unknown>)
+            clean(body["event_type"], 80),
+            body["payload"] && typeof body["payload"] === "object"
+              ? (body["payload"] as Record<string, unknown>)
               : {},
           ),
         });
@@ -359,7 +312,7 @@ async function handleBuildMyLogicApi(
       if (action === "failed")
         return jsonResponse(request, {
           ok: true,
-          ...(await failSession(session, clean(body.reason, 1000))),
+          ...(await failSession(session, clean(body["reason"], 1000))),
         });
       if (action === "run-plan")
         return jsonResponse(request, {
@@ -484,6 +437,8 @@ export default {
             { ok: false, error: "Request body too large." },
             413,
           );
+        if (!(await authenticatedUserId(request)))
+          return jsonResponse(request, { ok: false, error: "Sign in to use BuildMyLogic AI." }, 401);
         if (!rateLimit(request, "ai-functions", 20))
           return jsonResponse(
             request,
