@@ -240,6 +240,7 @@ function makeCheckpoints(body: Record<string, unknown>, instructions: string) {
         {
           index: 0,
           title: "Complete the challenge",
+          evidence: "not_verified" as const,
           detail: "Build the requested project and verify it locally.",
           status: "active" as const,
           attempts: 0,
@@ -653,6 +654,16 @@ export async function submitProject(session: LearningSession, files: unknown) {
         typeof (item as Record<string, unknown>)["content"] === "string",
       ),
     )
+    .filter((file) => {
+      const path = file.path.replace(/\\/g, "/");
+      return (
+        !path.startsWith("/") &&
+        !path.split("/").includes("..") &&
+        !/(^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|credentials[^/]*|secrets[^/]*|\.ssh)(?:\/|$)|\.(?:pem|key)$/i.test(
+          path,
+        )
+      );
+    })
     .slice(0, 250)
     .map((file) => ({
       path: text(file.path, 240),
