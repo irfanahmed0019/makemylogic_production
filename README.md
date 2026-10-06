@@ -4,6 +4,13 @@
 
 BuildMyLogic is a practical learning platform that helps beginners move from **knowing concepts to actually building software**.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/buildmylogic-desktop.png" alt="BuildMyLogic on desktop" width="64%">
+  <img src="docs/screenshots/buildmylogic-mobile.png" alt="BuildMyLogic on mobile" width="22%">
+</p>
+
 ## Why BuildMyLogic?
 
 Most learning platforms measure what students can **answer**. BuildMyLogic measures what they can **build, debug, improve, and prove**.
