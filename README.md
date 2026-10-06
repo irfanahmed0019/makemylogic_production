@@ -7,8 +7,8 @@ BuildMyLogic is a practical learning platform that helps beginners move from **k
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/buildmylogic-desktop.png" alt="BuildMyLogic on desktop" width="64%">
-  <img src="docs/screenshots/buildmylogic-mobile.png" alt="BuildMyLogic on mobile" width="22%">
+  <img src="https://github.com/user-attachments/assets/2d0d8ef5-4c36-4812-af2a-cf8308849ab8" alt="BuildMyLogic on desktop" width="64%">
+  <img src="https://github.com/user-attachments/assets/0152a7d4-cf9e-4c97-896e-3132a15243d3" alt="BuildMyLogic on mobile" width="22%">
 </p>
 
 ## Why BuildMyLogic?
