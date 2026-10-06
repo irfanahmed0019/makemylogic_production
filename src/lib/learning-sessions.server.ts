@@ -3,6 +3,7 @@ import { sarvamJson } from "./sarvam.server";
 export type LearningSession = {
   sessionId: string;
   userId: string;
+  authenticatedOwner?: boolean;
   challengeId: string;
   title: string;
   language: string;
@@ -250,6 +251,7 @@ function makeCheckpoints(body: Record<string, unknown>, instructions: string) {
 
 export async function startLearningSession(
   body: Record<string, unknown>,
+  authenticatedUserId: string,
 ): Promise<LearningSession> {
   const challengeId = text(body["challenge_id"] ?? body["challengeId"], 180);
   if (!challengeId) throw new Error("challenge_id is required.");
@@ -261,7 +263,8 @@ export async function startLearningSession(
   const instructions = text(body["instructions"], 6000).replace(/\\n/g, "\n");
   const session: LearningSession = {
     sessionId,
-    userId: text(body["user_id"] ?? body["userId"], 180) || "local-builder",
+    userId: authenticatedUserId,
+    authenticatedOwner: true,
     challengeId,
     title: text(body["title"], 180) || challengeId,
     language: text(body["language"], 64) || "Python",
