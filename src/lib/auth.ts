@@ -74,10 +74,10 @@ export function getAuthSession(): AuthSession | null {
 export async function getAuthSessionForApi(): Promise<AuthSession | null> {
   load();
   if (AUTH_TEMPORARILY_DISABLED) return null;
-  if (!supabase) return session;
+  if (!supabase) return null;
   const { data } = await supabase.auth.getSession();
   const current = data.session;
-  if (!current?.user) return session;
+  if (!current?.user) { session = null; persist(); return null; }
   session = {
     uid: current.user.id,
     email: current.user.email ?? "",
@@ -141,15 +141,7 @@ export async function signInWithGoogle() {
   if (hasSupabaseConfig) {
     return await signInWithSupabaseGoogle();
   }
-  // Fallback demo local login
-  session = {
-    uid: "local-builder",
-    email: "builder@buildmylogic.local",
-    displayName: "Builder",
-    expiresAt: Date.now() + 86400 * 1000,
-  };
-  persist();
-  return session;
+  throw new Error("Sign-in is not configured. Contact BuildMyLogic support.");
 }
 
 export async function signInWithGoogleCredential(credential: string) {
@@ -182,15 +174,7 @@ export async function signInWithGoogleCredential(credential: string) {
     }
   }
 
-  // Fallback if no Supabase configured: parse JWT safely or set local session
-  session = {
-    uid: "google-user",
-    email: "user@gmail.com",
-    displayName: "Google User",
-    expiresAt: Date.now() + 3600 * 1000,
-  };
-  persist();
-  return session;
+  throw new Error("Could not verify Google sign-in with Supabase.");
 }
 
 export async function signOut() {
