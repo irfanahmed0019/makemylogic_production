@@ -72,9 +72,30 @@ function jsonResponse(request: Request, body: unknown, status = 200): Response {
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > 1_000_000) return {};
+  if (Number.isFinite(contentLength) && contentLength > 1_000_000)
+    throw new Error("Request body too large.");
   try {
-    const body = await request.json();
+    const reader = request.body?.getReader();
+    if (!reader) return {};
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 1_000_000) {
+        await reader.cancel();
+        return {};
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    const body = JSON.parse(new TextDecoder().decode(bytes));
     return body && typeof body === "object"
       ? (body as Record<string, unknown>)
       : {};
@@ -110,6 +131,11 @@ function rateLimit(
     forwarded || request.headers.get("cf-connecting-ip")?.trim() || "unknown";
   const key = `${scope}:${client}`;
   const now = Date.now();
+  if (rateLimits.size >= 10_000) {
+    for (const [entry, value] of rateLimits)
+      if (value.resetsAt <= now) rateLimits.delete(entry);
+    if (rateLimits.size >= 10_000 && !rateLimits.has(key)) return false;
+  }
   const bucket = rateLimits.get(key);
   if (!bucket || bucket.resetsAt <= now) {
     rateLimits.set(key, { count: 1, resetsAt: now + windowMs });
@@ -438,6 +464,33 @@ export default {
       const apiResponse = await handleBuildMyLogicApi(request);
       if (apiResponse) return apiResponse;
 
+      const functionBase = process.env["TSS_SERVER_FN_BASE"] || "/_serverFn";
+      if (new URL(request.url).pathname.startsWith(functionBase)) {
+        if (request.method !== "POST")
+          return jsonResponse(
+            request,
+            { ok: false, error: "Method not allowed." },
+            405,
+          );
+        if (request.headers.get("origin") && !allowedOrigin(request))
+          return jsonResponse(
+            request,
+            { ok: false, error: "Origin is not allowed." },
+            403,
+          );
+        if (Number(request.headers.get("content-length") || "0") > 1_000_000)
+          return jsonResponse(
+            request,
+            { ok: false, error: "Request body too large." },
+            413,
+          );
+        if (!rateLimit(request, "ai-functions", 20))
+          return jsonResponse(
+            request,
+            { ok: false, error: "Too many requests. Try again shortly." },
+            429,
+          );
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
