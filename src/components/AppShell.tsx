@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Menu,
   MessageCircle,
+  Bug,
   X,
 } from "lucide-react";
 import {
@@ -28,6 +29,7 @@ import { signOut, useAuth } from "@/lib/auth";
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { to: "/learn", label: "Learn", icon: BookOpen },
+  { to: "/debug", label: "Debug", icon: Bug },
   { to: "/mentor", label: "Chatbot", icon: MessageCircle },
   { to: "/missions", label: "Missions", icon: Rocket },
   { to: "/skills", label: "Skills", icon: Sparkles },
