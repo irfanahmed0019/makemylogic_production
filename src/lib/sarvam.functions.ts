@@ -730,3 +730,130 @@ UPLOADED FILES:\n${snapshot}`,
       ),
     );
   });
+
+export const aiGenerateDebugChallenge = createServerFn({ method: "POST" })
+  .middleware([authenticatedAi])
+  .validator((input: { language: string; difficulty: string }) => ({
+    language: String(input.language).slice(0, 40),
+    difficulty: String(input.difficulty).slice(0, 20),
+  }))
+  .handler(async ({ data }) => {
+    const difficultyGuide =
+      data.difficulty === "hard"
+        ? "3 to 4 bugs, mixing 1 syntax error with subtle logic errors (off-by-one, wrong operator, wrong variable, flipped condition)."
+        : data.difficulty === "medium"
+          ? "2 to 3 bugs, mixing 1 syntax error and 1-2 clear logic errors."
+          : "1 to 2 bugs, at least one simple syntax error a beginner can spot.";
+    const result = await import("./sarvam.server").then(({ sarvamJson }) =>
+      sarvamJson<{
+        title: string;
+        task: string;
+        buggyCode: string;
+        bugCount: number;
+        bugs: { kind: "syntax" | "logic"; hint: string }[];
+        solution: string;
+      }>(
+        key(),
+        COACH,
+        `Create a debugging exercise for a learner. Write a short program in ${data.difficulty || "easy"} level ${data.language || "Python"} that does one clear, useful task, then deliberately break it.
+
+REQUIREMENTS:
+- The program must be 8 to 25 lines, self-contained, and use only the standard library.
+- Plant exactly these bugs: ${difficultyGuide}
+- Every bug must be real: the buggy code must actually fail or produce a wrong result, and the solution must be the same program with only those bugs fixed.
+- Hints should nudge toward the bug's area without giving the exact fix.
+- Use simple English in the task description.
+
+Return JSON exactly:
+{"title": string (short exercise name), "task": string (1-2 sentences: what the correct program should do, with one concrete example), "buggyCode": string (the broken program), "bugCount": number, "bugs": [{"kind": "syntax" | "logic", "hint": string}], "solution": string (the fixed program)}`,
+        1800,
+      ),
+    );
+    if (
+      !result ||
+      typeof result.buggyCode !== "string" ||
+      !result.buggyCode.trim() ||
+      typeof result.solution !== "string" ||
+      !result.solution.trim()
+    ) {
+      throw new Error(
+        "Vibe could not build a debug exercise. Please try again.",
+      );
+    }
+    return {
+      title: String(result.title || "Debug challenge").slice(0, 120),
+      task: String(result.task || "").slice(0, 600),
+      buggyCode: result.buggyCode.slice(0, 6000),
+      bugCount:
+        typeof result.bugCount === "number" && result.bugCount > 0
+          ? Math.min(6, Math.round(result.bugCount))
+          : Array.isArray(result.bugs)
+            ? result.bugs.length
+            : 1,
+      bugs: (Array.isArray(result.bugs) ? result.bugs : [])
+        .slice(0, 6)
+        .map((bug) => ({
+          kind:
+            bug?.kind === "logic" ? ("logic" as const) : ("syntax" as const),
+          hint: String(bug?.hint ?? "").slice(0, 240),
+        })),
+      solution: result.solution.slice(0, 6000),
+    };
+  });
+
+export const aiCheckDebugFix = createServerFn({ method: "POST" })
+  .middleware([authenticatedAi])
+  .validator(
+    (input: {
+      language: string;
+      task: string;
+      buggyCode: string;
+      fixedCode: string;
+      solution: string;
+    }) => ({
+      language: String(input.language).slice(0, 40),
+      task: String(input.task).slice(0, 600),
+      buggyCode: String(input.buggyCode).slice(0, 6000),
+      fixedCode: String(input.fixedCode).slice(0, 6000),
+      solution: String(input.solution).slice(0, 6000),
+    }),
+  )
+  .handler(async ({ data }) => {
+    if (!data.fixedCode.trim()) {
+      throw new Error("Write your fix first, then ask Vibe to check it.");
+    }
+    return await import("./sarvam.server").then(({ sarvamJson }) =>
+      sarvamJson<{
+        solved: boolean;
+        verdict: string;
+        fixedBugs: string[];
+        remainingIssues: string[];
+      }>(
+        key(),
+        COACH,
+        `You are grading a learner's debugging attempt. Compare their fixed code against the buggy code, the reference solution and the task.
+
+Judge strictly but fairly:
+- solved is true only when the learner's code would run correctly AND correctly does the task. Their fix does not need to match the reference solution word for word; any correct fix counts.
+- If a syntax error remains, or the program still produces a wrong result for the task's example, solved is false.
+- List what they fixed in fixedBugs (short phrases), and what is still broken or missing in remainingIssues (short, specific, no full answers). Never shame the learner.
+- Use simple English.
+
+Return JSON exactly:
+{"solved": boolean, "verdict": string (1-2 sentences of feedback), "fixedBugs": [string], "remainingIssues": [string]}
+
+LANGUAGE: ${data.language}
+TASK: ${data.task}
+
+BUGGY CODE GIVEN TO THE LEARNER:
+${data.buggyCode}
+
+REFERENCE SOLUTION (hidden from the learner):
+${data.solution}
+
+LEARNER'S FIXED CODE:
+${data.fixedCode}`,
+        900,
+      ),
+    );
+  });
