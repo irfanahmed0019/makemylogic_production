@@ -379,7 +379,7 @@ function Sessions() {
       path = await pickProjectFolder(true);
       if (!path) {
         setPickerError(
-          "Select a local project folder first. Keep the BuildMyLogic desktop bridge running so the exact folder can be opened in VS Code.",
+          "Select a local project folder first. Open VS Code with the BuildMyLogic extension installed, so the exact folder can be opened for you.",
         );
         return;
       }
@@ -465,7 +465,7 @@ function Sessions() {
       // picker when this action is specifically trying to launch VS Code.
       if (forOpening) {
         setPickerError(
-          "The local folder bridge is not running. Start it with `npm run dev` in BuildMyLogic, then click Open VS Code again.",
+          "VS Code is not reachable yet. Open VS Code with the BuildMyLogic extension installed (get it from the Extension page at /extension.html), then click Open VS Code again.",
         );
         return "";
       }
@@ -1169,8 +1169,9 @@ function Sessions() {
               </p>
             )}
             <p className="mt-3 text-xs font-bold text-muted-foreground">
-              BuildMyLogic's local bridge reads the exact folder path on your
-              computer, so VS Code can open that workspace directly.
+              The BuildMyLogic VS Code extension runs the local bridge that
+              reads the exact folder path on your computer, so VS Code can
+              open that workspace directly.
             </p>
           </section>
 
@@ -1706,4 +1707,4 @@ function ExtensionInstallBanner() {
       </a>
     </section>
   );
-}
+            }
