@@ -7,7 +7,7 @@ const PORT = Number(process.env.LOOP_BRIDGE_PORT || 8091);
 const ALLOWED_ORIGINS = new Set(
   (
     process.env.LOOP_BRIDGE_ORIGINS ||
-    "http://localhost:8080,http://127.0.0.1:8080,https://makemylogic-production.vercel.app"
+    "http://localhost:8080,http://127.0.0.1:8080,https://buildmylogic.vercel.app,https://makemylogicproductiondddd.vercel.app,https://buildmylogic-app.vercel.app,https://makemylogic-production.vercel.app"
   )
     .split(",")
     .map((value) => value.trim())
@@ -137,7 +137,7 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "OPTIONS") return json(res, 204, {});
   if (req.method === "GET" && req.url === "/health")
-    return json(res, 200, { ok: true, platform: process.platform });
+    return json(res, 200, { ok: true, platform: process.platform, source: "buildmylogic-dev-script" });
 
   if (req.method === "POST" && req.url === "/pick-folder") {
     try {
@@ -293,6 +293,6 @@ server.on("error", (error) => {
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[LOOP] Local desktop bridge ready: http://127.0.0.1:${PORT}`);
   console.log(
-    `[LOOP] Allowed browser origins: localhost/127.0.0.1 and makemylogic-production.vercel.app`,
+    `[LOOP] Allowed browser origins: ${Array.from(ALLOWED_ORIGINS).join(", ")}`,
   );
 });
