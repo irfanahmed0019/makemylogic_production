@@ -9,7 +9,7 @@ export interface AppConfig {
 	apiBaseUrl: string;
 }
 
-export const DEFAULT_REMOTE_API_BASE_URL = 'https://makemylogic-production.vercel.app';
+export const DEFAULT_REMOTE_API_BASE_URL = 'https://makemylogicproductiondddd.vercel.app';
 export const DEFAULT_LOCAL_API_BASE_URL = 'http://localhost:8080';
 
 function isExtensionDevelopmentHost(): boolean {
