@@ -3,7 +3,7 @@
   "publisher": "buildmylogic",
   "displayName": "BuildMyLogic",
   "description": "A local-first coding teacher with learning challenges and Python feedback.",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "files": [
     "dist/**",
     "media/**",
@@ -19,6 +19,7 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onView:buildMyLogic.sidebar",
     "onCommand:logic-analyser.analyzeMyCode",
     "onUri"
