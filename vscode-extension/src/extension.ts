@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { loadAppConfig } from './config';
 import { SessionClient, RemoteSession } from './sessionClient';
 import { sidebarHtml } from './webviewHtml';
+import { startBridge, consumeStagedSession, SessionConnect } from './bridge';
 
 const viewId = 'buildMyLogic.sidebar';
 type Connection = { sessionId: string };
@@ -234,5 +235,20 @@ class Sidebar implements vscode.WebviewViewProvider {
   private post(message: unknown) { void this.view?.webview.postMessage(message); }
 }
 function valid(v: unknown): v is Message { return !!v && typeof v === 'object' && ['connect', 'hint', 'stuck', 'runTests', 'submit', 'failed', 'disconnect'].includes(String((v as Message).command)); }
-export function activate(context: vscode.ExtensionContext) { const config = loadAppConfig(); const sidebar = new Sidebar(new SessionClient(config.apiBaseUrl)); context.subscriptions.push(vscode.window.registerWebviewViewProvider(viewId, sidebar)); context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: (uri) => { void sidebar.connectFromUri(uri); } })); }
+export function activate(context: vscode.ExtensionContext) {
+  const config = loadAppConfig();
+  const sidebar = new Sidebar(new SessionClient(config.apiBaseUrl));
+  const connectSession = (connect: SessionConnect) => sidebar.connectFromUri(vscode.Uri.parse(`vscode://buildmylogic.logic-analyser/connect?sessionId=${encodeURIComponent(connect.sessionId)}&apiBaseUrl=${encodeURIComponent(connect.apiBaseUrl)}`));
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(viewId, sidebar));
+  context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: (uri) => { void sidebar.connectFromUri(uri); } }));
+  // Local desktop bridge: lets the BuildMyLogic website pick a project folder
+  // and open it here without any dev server running.
+  context.subscriptions.push(startBridge(context, {
+    extensionVersion: String(context.extension?.packageJSON?.version || ''),
+    connectSession: (connect) => connectSession(connect),
+  }));
+  // A folder opened from the website reloads this window; finish its pending
+  // session connect here.
+  void consumeStagedSession(context).then((staged) => { if (staged) void connectSession(staged); });
+}
 export function deactivate() {}
