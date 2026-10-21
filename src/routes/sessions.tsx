@@ -1707,4 +1707,4 @@ function ExtensionInstallBanner() {
       </a>
     </section>
   );
-            }
+        }
