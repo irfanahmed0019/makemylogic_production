@@ -11,6 +11,13 @@
 7. The backend validates the Session ID and session status before accepting events, detects repeated failures deterministically, and exposes the same state to the website.
 8. `Ask Vibe for a Hint` and `I'm Stuck` are explicit actions that can call Sarvam server-side and return a short intervention to VS Code.
 
+## Local folder bridge
+
+The desktop bridge (http://127.0.0.1:8091: health, folder picking, Open VS
+Code) is hosted by the installed extension (v0.0.7+), so learners never run a
+dev server. `npm run dev` in the web repo still starts its own copy for local
+development; if both run, whichever binds the port first serves the same API.
+
 ## Local development
 
 Web: `npm run dev` (the existing dev script starts the desktop bridge too).
